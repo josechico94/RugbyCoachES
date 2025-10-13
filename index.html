@@ -32,6 +32,7 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 
 let app, db = null, auth, userId = 'local_storage'; // db initialised to null
 let isAuthorized = false; // Estado de autorización
+let appInitialized = false; // Bandera para asegurar que initBoardApp solo se llame una vez
 
 // IMPORTANTE: LISTA DE USUARIOS AUTORIZADOS
 // Solo los IDs de usuario presentes en esta lista tendrán permisos para GUARDAR, EDITAR y ELIMINAR jugadas.
@@ -46,70 +47,121 @@ const AUTHORIZED_USERS_IDS = [
 // Usamos una colección PUBLIC/GLOBAL para que todos puedan leer.
 const getPlayCollectionRef = () => collection(db, `artifacts/${appId}/public/data/rugby_plays`);
 
+/**
+ * Gestiona el cambio de estado de autenticación (login/logout).
+ * Actualiza los permisos y la UI sin recargar la página.
+ */
+function handleAuthStateChange(user) {
+    if (user) {
+        // Usuario autenticado (anónimo o por email/password)
+        userId = user.uid;
+        window.userId = userId;
+
+        // Determinar si es un Entrenador (Authorized)
+        const newIsAuthorized = AUTHORIZED_USERS_IDS.includes(userId) && !user.isAnonymous;
+        window.isAuthorized = newIsAuthorized;
+        isAuthorized = newIsAuthorized; // Sincroniza la variable local
+
+        console.log(`Auth State Changed: UID=${userId}. Autorizado: ${isAuthorized} (Anónimo: ${user.isAnonymous})`);
+
+        // 1. Actualizar el estado de los controles
+        setControlsDisabled(!isAuthorized);
+        
+        // 2. Actualizar el botón de autenticación
+        updateAuthButton(!user.isAnonymous);
+        
+        // 3. Refrescar la lista de jugadas (se conecta a Firestore si userId es válido)
+        refreshPlayList();
+
+        // 4. Actualizar el indicador de la marca
+        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) ${isAuthorized ? '(Entrenador)' : '(Espectador)'}`;
+        
+    } else {
+        // Usuario deslogueado. Intentamos volver al modo anónimo si es posible.
+        userId = 'anonymous';
+        window.userId = userId;
+        window.isAuthorized = false;
+        isAuthorized = false;
+        
+        // El onAuthStateChanged debería ser llamado después de signOut. 
+        // Si el usuario es nulo aquí, significa que se desconectó totalmente, 
+        // pero Firebase inmediatamente intenta volver al estado anónimo.
+        
+        // Si no hay usuario activo, aseguramos que los controles estén deshabilitados
+        setControlsDisabled(true);
+        updateAuthButton(false);
+        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) (Desconectado)`;
+    }
+
+    if (!appInitialized) {
+        // Si es la primera vez que se resuelve el estado, inicializa la aplicación principal
+        appInitialized = true;
+        window.initBoardApp();
+    }
+}
+
 // Función de inicialización asíncrona
 async function initFirebaseAndApp() {
     try {
-        // Usamos la configuración proporcionada por el usuario
+        // 1. Inicialización de Firebase (sin autenticación aún)
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
         
-        // --- INICIO: Manejo de Autenticación MÁS ROBUSTO ---
-        let signInSuccessful = false;
-        
-        if (initialAuthToken) {
-            try {
-                // 1. Intenta iniciar sesión con el Custom Token (Entrenador)
-                await signInWithCustomToken(auth, initialAuthToken);
-                signInSuccessful = true;
-            } catch (authError) {
-                // Si falla, intentamos Anónimo
-                console.warn("Fallo en signInWithCustomToken, intentando signInAnonymously:", authError.code);
-            }
-        }
-        
-        if (!signInSuccessful) {
-            // 2. Si no hubo token o el intento de token falló, usa Anónimo (Espectador)
-            await signInAnonymously(auth);
-        }
-        // --- FIN: Manejo de Autenticación MÁS ROBUSTO ---
-        
-        // --- Asignación de Estado Global ---
-        userId = auth.currentUser?.uid || 'anonymous';
-        isAuthorized = AUTHORIZED_USERS_IDS.includes(userId);
-        
-        console.log(`Firebase Auth ID: ${userId}. Autorizado: ${isAuthorized}`);
-        
-        // Reemplazamos las funciones de persistencia de localStorage por Firestore
+        // Exponemos servicios antes de la autenticación
         window.db = db;
-        window.auth = auth; // Exponemos auth para el login/logout
-        window.userId = userId;
+        window.auth = auth; 
         window.getPlayCollectionRef = getPlayCollectionRef;
         window.onSnapshot = onSnapshot;
         window.doc = doc;
         window.setDoc = setDoc;
         window.deleteDoc = deleteDoc;
         window.query = query;
-        window.isAuthorized = isAuthorized; // Pasamos el estado de autorización
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
         window.signOut = signOut;
 
         
-        // ÉXITO: Mostrar indicador de Cloud
-        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) ${isAuthorized ? '(Entrenador)' : '(Espectador)'}`;
-
-    } catch (error) {
-        // Este catch solo se activaría si falla la inicialización de initializeApp o signInAnonymously
-        console.error("Firebase initialization failed, switching to local storage:", error);
-        db = null; // Confirmamos que db es nulo si falla
-        isAuthorized = true; // Si estamos en local, asumimos que estamos autorizados para guardar en localstorage
+        // 2. Listener de cambio de estado de autenticación (reemplaza la lógica de permisos de aquí)
+        // onAuthStateChanged se llama inmediatamente al inicio con el estado actual (o null)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Si ya hay un usuario (custom token o anónimo inicial)
+                handleAuthStateChange(user);
+            } else {
+                // Si no hay usuario activo, forzamos la autenticación anónima por primera vez
+                signInAnonymously(auth)
+                    .then(credentials => handleAuthStateChange(credentials.user))
+                    .catch(error => {
+                        console.error("Fallo al iniciar sesión anónimamente:", error);
+                        // Si falla la autenticación anónima, se llama al fallback (handled below)
+                        handleAuthStateChange(null);
+                    });
+            }
+        });
         
-        // FALLBACK: Mostrar indicador de Local
+        // 3. Intentar iniciar sesión con Custom Token si está disponible (Solo en entornos específicos)
+        if (initialAuthToken) {
+            try {
+                // Intentamos sin esperar, el onAuthStateChanged manejará el resultado
+                signInWithCustomToken(auth, initialAuthToken).catch(e => console.warn("Custom token falló:", e.code));
+            } catch (authError) {
+                console.warn("Error en el intento de signInWithCustomToken:", authError.code);
+            }
+        }
+        
+    } catch (error) {
+        // Este catch solo se activaría si falla la inicialización de initializeApp o getAuth/getFirestore
+        console.error("Firebase initialization failed, switching to local storage:", error);
+        db = null; // Confirma que db es nulo si falla
+        window.db = null;
+        window.isAuthorized = true; // Permite guardar localmente en el fallback
+        
+        // Activa el modo local y la inicialización de la app si falló completamente Firebase
         document.getElementById('brand').innerHTML = `<span style="color:var(--warn);width:12px;height:12px;border-radius:50%;background:var(--warn);display:inline-block;margin-right:10px;"></span>RugbyBoard Pro (Local)`;
-    } finally {
-        // ¡ESTO ES CRUCIAL! Llama a la lógica principal de la aplicación SIEMPRE.
-        window.db = db;
-        window.initBoardApp();
+        if (!appInitialized) {
+            appInitialized = true;
+            window.initBoardApp();
+        }
     }
 }
 
@@ -1052,15 +1104,20 @@ btnLogin.addEventListener('click', async () => {
 
     try {
         await window.signInWithEmailAndPassword(window.auth, email, password);
-        // Si tiene éxito, el onAuthStateChanged (implícito por el entorno) debería actualizar la página.
-        // Como estamos simulando, cerramos el modal y forzamos un refresh simple.
+        // Si tiene éxito, el onAuthStateChanged se disparará, actualizando la UI.
         loginModal.style.display = 'none';
-        showStatus('Inicio de sesión exitoso. Recargando permisos...', 'var(--accent2)');
-        window.location.reload(); 
+        loginMessage.textContent = ''; // Limpiar mensaje de login
 
     } catch (error) {
         console.error("Login failed:", error.code, error.message);
-        loginMessage.textContent = `Error: ${error.message.replace('Firebase: Error ', '').replace(/\(.*\)/, '')}`;
+        // Mostrar mensaje de error más legible
+        let errorMessage = error.message;
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+            errorMessage = 'Credenciales incorrectas.';
+        } else if (error.code === 'auth/invalid-email') {
+            errorMessage = 'Formato de email inválido.';
+        }
+        loginMessage.textContent = `Error: ${errorMessage.replace('Firebase: Error ', '').replace(/\(.*\)/, '')}`;
     } finally {
         btnLogin.disabled = false;
     }
@@ -1080,7 +1137,7 @@ async function handleLogout() {
         try {
             await window.signOut(window.auth);
             showStatus('Sesión cerrada. Acceso como espectador.', 'var(--accent)');
-            window.location.reload(); 
+            // onAuthStateChanged manejará el cambio de permisos.
         } catch (error) {
             showStatus('Error al cerrar sesión.', 'var(--red)');
             console.error("Logout failed:", error);
