@@ -7,7 +7,7 @@
 <script type="module">
 // --- Configuración e Inicialización de Firebase (OBLIGATORIO) ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, deleteDoc, collection, query, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Habilitar logs de depuración
@@ -54,7 +54,7 @@ async function initFirebaseAndApp() {
         db = getFirestore(app);
         auth = getAuth(app);
         
-        // --- INICIO: Manejo de Autenticación MÁS ROBUSTO (Fix para auth/configuration-not-found) ---
+        // --- INICIO: Manejo de Autenticación MÁS ROBUSTO ---
         let signInSuccessful = false;
         
         if (initialAuthToken) {
@@ -63,9 +63,8 @@ async function initFirebaseAndApp() {
                 await signInWithCustomToken(auth, initialAuthToken);
                 signInSuccessful = true;
             } catch (authError) {
-                // Si falla (ej: token inválido o configuración de Auth no cargada), loguea el error y continúa.
+                // Si falla, intentamos Anónimo
                 console.warn("Fallo en signInWithCustomToken, intentando signInAnonymously:", authError.code);
-                // No lanzamos el error, permitimos el flujo a Anónimo.
             }
         }
         
@@ -75,6 +74,7 @@ async function initFirebaseAndApp() {
         }
         // --- FIN: Manejo de Autenticación MÁS ROBUSTO ---
         
+        // --- Asignación de Estado Global ---
         userId = auth.currentUser?.uid || 'anonymous';
         isAuthorized = AUTHORIZED_USERS_IDS.includes(userId);
         
@@ -82,7 +82,7 @@ async function initFirebaseAndApp() {
         
         // Reemplazamos las funciones de persistencia de localStorage por Firestore
         window.db = db;
-        window.auth = auth; // Exponemos auth para verificar el estado en refreshPlayList
+        window.auth = auth; // Exponemos auth para el login/logout
         window.userId = userId;
         window.getPlayCollectionRef = getPlayCollectionRef;
         window.onSnapshot = onSnapshot;
@@ -91,6 +91,8 @@ async function initFirebaseAndApp() {
         window.deleteDoc = deleteDoc;
         window.query = query;
         window.isAuthorized = isAuthorized; // Pasamos el estado de autorización
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.signOut = signOut;
 
         
         // ÉXITO: Mostrar indicador de Cloud
@@ -223,6 +225,35 @@ initFirebaseAndApp();
     100% { transform: rotate(360deg); }
   }
 
+  /* Modal Login */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+    place-items: center;
+    z-index: 1000;
+  }
+  .modal-content {
+    background-color: var(--panel);
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    width: 90%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    border: 1px solid var(--border);
+  }
+  .modal-content input {
+    width: 100%;
+    padding: 10px;
+  }
+  .modal-content button {
+    margin-top: 10px;
+  }
+
 
   /* Responsive layout: panel lateral en desktop */
   @media (min-width: 1000px){
@@ -303,6 +334,21 @@ initFirebaseAndApp();
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 </head>
 <body>
+  <!-- Modal de Login -->
+  <div class="modal-overlay" id="loginModal">
+    <div class="modal-content">
+        <h3 style="font-weight:700; color:var(--accent);">Acceso de Entrenador</h3>
+        <p class="subtle">Usa tu email y contraseña de Firebase para editar las jugadas.</p>
+        
+        <input type="email" id="loginEmail" placeholder="Email"/>
+        <input type="password" id="loginPassword" placeholder="Contraseña"/>
+        
+        <button class="btn primary" id="btnLogin">Iniciar Sesión</button>
+        <p id="loginMessage" style="color:var(--red); font-size:0.85rem; margin:0;"></p>
+        <button class="btn" id="btnCloseLogin">Cerrar</button>
+    </div>
+  </div>
+
   <!-- Contenedor de la aplicación -->
   <div class="app">
     <!-- Topbar -->
@@ -321,6 +367,8 @@ initFirebaseAndApp();
         <button class="btn" id="btnExportJpg">JPG</button>
         <button class="btn" id="btnExportWebm">WebM</button>
         <button class="btn" id="btnExportMp4">MP4</button>
+        <!-- BOTÓN DE LOGIN/LOGOUT -->
+        <button class="btn primary" id="btnAuthAction">Modo Entrenador</button>
       </div>
     </header>
 
@@ -573,6 +621,8 @@ const ball = document.getElementById('ball');
 const exportCanvas = document.getElementById('exportCanvas');
 const ctx = exportCanvas.getContext('2d');
 const selectionBox = document.getElementById('selectionBox'); 
+const loginModal = document.getElementById('loginModal'); // Nuevo DOM ID
+const btnAuthAction = document.getElementById('btnAuthAction'); // Nuevo DOM ID
 
 /* Topbar / acciones */
 const btnLandscape = document.getElementById('btnLandscape');
@@ -962,6 +1012,85 @@ btnDeleteMobile.addEventListener('click', async () => {
     if (!confirm(`¿Estás seguro de eliminar la jugada "${playListMobile.options[playListMobile.selectedIndex].textContent}"?`)) return;
     await deletePlay(playId);
 });
+
+
+/* -------------------------------------------------------------------------- */
+/* ---------- Lógica de Autenticación (Login/Logout) ---------- */
+/* -------------------------------------------------------------------------- */
+
+// Función para actualizar el botón de acción de Auth
+function updateAuthButton(isLoggedIn) {
+    if (isLoggedIn) {
+        btnAuthAction.textContent = 'Cerrar Sesión';
+        btnAuthAction.classList.remove('primary');
+        btnAuthAction.onclick = handleLogout;
+    } else {
+        btnAuthAction.textContent = 'Modo Entrenador';
+        btnAuthAction.classList.add('primary');
+        btnAuthAction.onclick = () => loginModal.style.display = 'grid';
+    }
+}
+
+// Evento: Iniciar Sesión
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const btnLogin = document.getElementById('btnLogin');
+const btnCloseLogin = document.getElementById('btnCloseLogin');
+const loginMessage = document.getElementById('loginMessage');
+
+btnLogin.addEventListener('click', async () => {
+    const email = loginEmail.value;
+    const password = loginPassword.value;
+    
+    if (!email || !password) {
+        loginMessage.textContent = 'Ingresa email y contraseña.';
+        return;
+    }
+    
+    btnLogin.disabled = true;
+    loginMessage.textContent = 'Iniciando sesión...';
+
+    try {
+        await window.signInWithEmailAndPassword(window.auth, email, password);
+        // Si tiene éxito, el onAuthStateChanged (implícito por el entorno) debería actualizar la página.
+        // Como estamos simulando, cerramos el modal y forzamos un refresh simple.
+        loginModal.style.display = 'none';
+        showStatus('Inicio de sesión exitoso. Recargando permisos...', 'var(--accent2)');
+        window.location.reload(); 
+
+    } catch (error) {
+        console.error("Login failed:", error.code, error.message);
+        loginMessage.textContent = `Error: ${error.message.replace('Firebase: Error ', '').replace(/\(.*\)/, '')}`;
+    } finally {
+        btnLogin.disabled = false;
+    }
+});
+
+// Evento: Cerrar Modal
+btnCloseLogin.addEventListener('click', () => {
+    loginModal.style.display = 'none';
+    loginMessage.textContent = '';
+    loginEmail.value = '';
+    loginPassword.value = '';
+});
+
+// Evento: Cerrar Sesión
+async function handleLogout() {
+    if (window.db) {
+        try {
+            await window.signOut(window.auth);
+            showStatus('Sesión cerrada. Acceso como espectador.', 'var(--accent)');
+            window.location.reload(); 
+        } catch (error) {
+            showStatus('Error al cerrar sesión.', 'var(--red)');
+            console.error("Logout failed:", error);
+        }
+    } else {
+        // En modo local, solo hacemos un "reset" visual.
+        showStatus('Modo local: Cierre de sesión simulado.', 'var(--accent)');
+        window.location.reload();
+    }
+}
 
 
 /* ---------- Utilidades Generales de UI/Estado ---------- */
@@ -2120,6 +2249,7 @@ window.initBoardApp = function initBoardApp(){
   
   // Aplica las restricciones de permisos
   setControlsDisabled(!window.isAuthorized);
+  updateAuthButton(window.auth.currentUser.isAnonymous === false);
 
   // eventos de drag para el balón
   enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
