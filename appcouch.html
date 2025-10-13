@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>RugbyBoard Pro — Animación + Export (Firestore)</title>
+<script type="module">
+// --- Configuración e Inicialización de Firebase (OBLIGATORIO) ---
+// CORRECCIÓN: Eliminamos los corchetes en las URLs para evitar errores de resolución de módulos en entornos locales.
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, deleteDoc, collection, query, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// Habilitar logs de depuración
+setLogLevel('Debug');
+
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+let app, db = null, auth, userId = 'local_storage'; // db initialised to null
+
+// Ruta de la colección para guardar las jugadas privadas del usuario
+const getPlayCollectionRef = (uid) => collection(db, `artifacts/${appId}/users/${uid}/rugby_plays`);
+
+// Función de inicialización asíncrona
+async function initFirebaseAndApp() {
+    try {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        if (initialAuthToken) {
+            await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+            await signInAnonymously(auth);
+        }
+        
+        userId = auth.currentUser?.uid || 'anonymous';
+        console.log("Firebase Auth ID:", userId);
+        
+        // Reemplazamos las funciones de persistencia de localStorage por Firestore
+        window.db = db;
+        window.userId = userId;
+        window.getPlayCollectionRef = getPlayCollectionRef;
+        window.onSnapshot = onSnapshot;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.query = query;
+        
+        // ÉXITO: Mostrar indicador de Cloud
+        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud)`;
+
+    } catch (error) {
+        console.error("Firebase initialization failed, switching to local storage:", error);
+        db = null; // Confirmamos que db es nulo si falla
+        // FALLBACK: Mostrar indicador de Local
+        document.getElementById('brand').innerHTML = `<span style="color:var(--warn);width:12px;height:12px;border-radius:50%;background:var(--warn);display:inline-block;margin-right:10px;"></span>RugbyBoard Pro (Local)`;
+    } finally {
+        // ¡ESTO ES CRUCIAL! Llama a la lógica principal de la aplicación SIEMPRE.
+        window.db = db;
+        window.initBoardApp();
+    }
+}
+
+// Establecer la función de inicialización en el ámbito global
+window.initFirebaseAndApp = initFirebaseAndApp;
+
+// LLAMADA CORREGIDA: Llamamos a la función inmediatamente después de que el módulo esté definido.
+initFirebaseAndApp();
+
+</script>
+<style>
+  :root{
+    --bg:#0b1520; --panel:#0e1c2a; --panel2:#122235; --ink:#e8eef5; --muted:#9fb3c8;
+    --border:#1b3147; --accent:#00c2ff; --accent2:#7ef29a; --warn:#ffd400; --red:#ff5a6b; --blue:#2f80ff;
+    --shadow:0 8px 28px rgba(0,0,0,.35);
+    --r:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  .app{display:grid;grid-template-rows:auto 1fr auto;min-height:100dvh}
+
+  /* Top bar */
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:linear-gradient(180deg,#0f2235,#0c1a29);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+  .toolbar{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+  .btn{appearance:none;border:1px solid var(--border);background:#122538;color:var(--ink);padding:.55rem .8rem;border-radius:10px;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .btn.primary{background:#0f2a3f;border-color:#22445f}
+  .seg{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .seg button{border:none;background:#13293d;padding:.45rem .7rem;color:var(--ink);cursor:pointer}
+  .seg button.active{background:#15354f;color:#7fe7ff}
+
+  /* Stage - Contenedor del tablero */
+  .stage{position:relative;display:grid;grid-template-columns: 1fr;grid-template-rows:1fr;min-height:calc(100dvh - 180px); padding: 12px;}
+  /* CORRECCIÓN DE CENTRADO: Usamos flexbox para asegurar que el contenido se centre verticalmente y horizontalmente */
+  .board-viewport{
+    position:relative;
+    inset:0;
+    display:flex; /* Cambiado de grid a flex */
+    justify-content: center; /* Centrado horizontal */
+    align-items: center; /* Centrado vertical */
+    overflow:hidden; 
+    border-radius: 12px;
+  }
+  /* Aseguramos que el wrap no se mueva de su posición inicial, solo se transforme */
+  .board-wrap{position:relative; width:1200px; height:700px; transform-origin:top left;} 
+  .board{position:absolute;inset:0;background:#137a46;border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .lines, .draw{position:absolute;inset:0;pointer-events:none}
+  svg{width:100%;height:100%;display:block}
+  .grid{position:absolute;inset:0;pointer-events:none;opacity:.55;display:none}
+  .grid.on{display:block}
+
+  /* Players & ball */
+  #players{position:absolute;inset:0;z-index:3;pointer-events:none}
+  .player{pointer-events:auto;position:absolute;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff;border:2px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:grab}
+  .player.selected{border: 3px solid var(--accent); box-shadow: 0 0 10px var(--accent);} /* Estilo para selección masiva */
+  .blue{background:var(--blue)} .red{background:var(--red)}
+  /* NUEVOS COLORES PARA EQUIPOS */
+  .team-1{background:var(--blue);}
+  .team-2{background:var(--red);}
+  
+  #ball{position:absolute;z-index:4}
+  .ball{width:50px;height:30px;background:var(--warn);border:2px solid #fff;border-radius:50%/60%;transform:translate(-50%,-50%) rotate(-15deg);box-shadow:0 3px 12px rgba(0,0,0,.35);cursor:grab}
+  .ball::after{content:"";position:absolute;inset:6px 18px;border-radius:50%/60%;border:2px dashed rgba(0,0,0,.25)}
+  
+  /* Selection Box */
+  #selectionBox{
+      position: absolute;
+      pointer-events: none;
+      border: 1px dashed var(--accent);
+      background: rgba(0, 194, 255, 0.1);
+      z-index: 5;
+      display: none;
+  }
+
+  /* Bottom dock (tools) */
+  .dock{position:sticky;bottom:0;background:linear-gradient(0deg,#0d1f30,#0b1928);border-top:1px solid var(--border);z-index:90}
+  /* En móvil, el dock ocupa todo el ancho */
+  .dock-inner{display:grid;grid-template-columns:1fr;gap:10px;padding:10px 12px}
+  .row{display:flex;flex-wrap:wrap;gap:8px}
+  .field{display:flex;align-items:center;gap:8px;background:#0f2032;border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem}
+  .field label{font-size:.85rem;color:var(--muted)}
+  select,input[type="number"],input[type="text"]{background:#0c1c2b;color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:.45rem .55rem}
+  input[type="checkbox"]{width:18px;height:18px}
+  .grow{flex:1}
+  .subtle{color:var(--muted);font-size:.85rem}
+  
+  /* Gemini Assistant Styles */
+  #geminiAssistantOutput {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    white-space: pre-wrap; /* Mantiene saltos de línea del LLM */
+    font-size: 0.9rem;
+  }
+  
+  .loader {
+    border: 3px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 10px;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+
+  /* Responsive layout: panel lateral en desktop */
+  @media (min-width: 1000px){
+    .app{grid-template-rows:auto 1fr} /* Ya no hay footer.dock visible debajo de 1000px */
+    .stage{
+        /* CAMBIO CRUCIAL: Invertir el orden de las columnas (panel: 320px, campo: 1fr) */
+        grid-template-columns: 320px 1fr; 
+        gap:14px; 
+        padding:12px; 
+        display: grid; /* Usamos grid para las columnas */
+        min-height: calc(100dvh - 70px); /* Altura mínima del viewport menos el topbar */
+    }
+    .board-viewport { height: 100%; } /* El tablero ocupa toda la altura del stage */
+    
+    /* Panel lateral: visible en desktop */
+    .sidepanel{
+        background:var(--panel);
+        border:1px solid var(--border);
+        border-radius:12px;
+        padding:12px;
+        display:flex; /* Muestra el panel */
+        flex-direction:column;
+        /* AJUSTE: Reducir gap de secciones para evitar scroll innecesario */
+        gap:12px; 
+        min-height: 100%; /* Ocupa todo el alto */
+        overflow-y: auto; /* Permite scroll si hay mucho contenido */
+    }
+    
+    /* Ocultamos los controles de la parte inferior que se movieron al sidepanel */
+    .dock{ 
+        display: none; 
+        position: static; 
+        border: none;
+    }
+    
+    /* Mostramos el dock de herramientas de dibujo en una columna inferior separada para móvil */
+    #toolDock {
+        display: none; 
+    }
+    .sidepanel #toolDock {
+        display: flex; 
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px; /* Espaciado ajustado */
+    }
+    .sidepanel #toolDock .row {
+        flex-wrap: wrap; /* Aseguramos que se envuelva bien en la columna estrecha */
+    }
+    
+    /* AJUSTE: Eliminar padding-top de las secciones que ya tienen margen en el sidepanel */
+    .sidepanel > div {
+        padding-top: 0 !important;
+        border-top: none !important;
+    }
+    /* Añadir separador visual solo entre secciones (excepto la primera) */
+    .sidepanel > div + div {
+        border-top: 1px solid var(--border) !important;
+        padding-top: 12px !important;
+    }
+  }
+
+  /* Aseguramos que el dock de herramientas de dibujo se muestre en móvil/tablet */
+  @media (max-width: 999px) {
+    .dock {
+        display: block; /* Muestra el dock inferior */
+        position: sticky;
+        bottom: 0;
+    }
+    .sidepanel {
+        display: none !important; /* Oculta el panel lateral en móvil */
+    }
+  }
+
+  .pill{background:#0f2032;border:1px solid var(--border);padding:.25rem .55rem;border-radius:999px;font-size:.8rem}
+
+</style>
+<!-- FFmpeg.wasm UMD -->
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
+</head>
+<body>
+  <!-- Contenedor de la aplicación -->
+  <div class="app">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="brand" id="brand"><span class="dot"></span>RugbyBoard Pro (Cargando...)</div>
+
+      <div class="seg" id="orientationSeg">
+        <button id="btnLandscape" class="active" title="Horizontal">Horizontal</button>
+        <button id="btnPortrait" title="Vertical">Vertical</button>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="btnReset">Reiniciar</button>
+        <button class="btn primary" id="btnSavePlay">Guardar jugada</button>
+        <button class="btn" id="btnLoadPlay" disabled>Cargar</button>
+        <button class="btn" id="btnExportJpg">JPG</button>
+        <button class="btn" id="btnExportWebm">WebM</button>
+        <button class="btn" id="btnExportMp4">MP4</button>
+      </div>
+    </header>
+
+    <!-- Main stage -->
+    <main class="stage">
+      
+      <!-- Panel lateral con la gestión de jugadas y el timeline -->
+      <aside class="sidepanel">
+
+        <!-- 4. Asistente Táctico Gemini ✨ -->
+        <div id="geminiAssistantSection" style="display:flex; flex-direction:column; gap:10px;">
+          <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Asistente Táctico ✨</h3>
+          <p class="subtle" style="margin:0; font-size:.8rem;">Obtén un análisis instantáneo de la formación actual en el campo.</p>
+          
+          <button class="btn primary" id="btnGeminiAnalyze">Analizar Formación</button>
+
+          <div id="geminiAssistantOutput">
+            Haz clic en 'Analizar Formación' para obtener un reporte de Gemini.
+          </div>
+        </div>
+        
+        <!-- 3. Controles de dibujo (MOVILIZADOS AQUÍ DESDE EL DOCK INFERIOR) -->
+        <div id="drawingControlsSection" style="display:flex; flex-direction:column; gap:10px;">
+          <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Herramientas de Dibujo</h3>
+          <div class="row">
+            <div class="seg" id="toolSeg">
+              <button id="toolArrows" class="active">Flechas</button>
+              <button id="toolPen">Lápiz</button>
+            </div>
+            <button class="btn" id="btnUndo">Deshacer</button>
+            <button class="btn" id="btnClear">Borrar dibujos</button>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Color</label>
+              <select id="strokeColor">
+                <option value="#ffffff">Blanco</option>
+                <option value="#35d07f">Verde</option>
+                <option value="#2f80ff">Azul</option>
+                <option value="#ff5a6b">Rojo</option>
+                <option value="#ffd400" selected>Amarillo</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Grosor</label>
+              <select id="strokeWidth">
+                <option value="3">Fino</option>
+                <option value="5" selected>Medio</option>
+                <option value="7">Grueso</option>
+              </select>
+            </div>
+            <div class="field">
+              <input type="checkbox" id="dashed"> <label for="dashed">Punteado</label>
+            </div>
+          </div>
+          <div class="row">
+            <!--<div class="field">
+              <input type="checkbox" id="snap"> <label for="snap">Snap grilla</label>
+            </div>-->
+            <div class="field">
+              <input type="checkbox" id="showGrid"> <label for="showGrid">Ver grilla</label>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 0. Configuración de Equipos -->
+        <!-- COMENTADO: Módulo de configuración de equipos, oculto para simplificar la UI. -->
+        <!-- <div id="teamConfigSection" style="display:flex; flex-direction:column; gap:10px;">
+          <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent2);">Configuración de Equipos</h3>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="field grow">
+              <label class="subtle" style="color:var(--blue);">Equipo Azul (1)</label>
+              <input type="text" id="team1Name" placeholder="Ej: Pumas A" value="Equipo Azul" class="grow"/>
+            </div>
+            <div class="field grow">
+              <label class="subtle" style="color:var(--red);">Equipo Rojo (2)</label>
+              <input type="text" id="team2Name" placeholder="Ej: Cóndores B" value="Equipo Rojo" class="grow"/>
+            </div>
+          </div>
+          <p class="subtle" style="margin:0; font-size:.75rem;">Nota: Los nombres de los jugadores se basarán en los números de camiseta (ej. '1' a '15').</p>
+        </div> -->
+        
+        <!-- 1. Sección de Jugadas (Play Management) -->
+        <div id="playManagementSection" style="display:flex; flex-direction:column; gap:10px;">
+          <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Gestión de Jugadas</h3>
+          <div class="field grow">
+            <label class="subtle">Nombre de Jugada (ID en DB)</label>
+            <input type="text" id="playName" placeholder="Ej: Lineout 8" class="grow"/>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnDuplicate" disabled>Duplicar (Local)</button>
+            <select id="playList" class="btn grow" disabled>
+              <option value="">Cargando jugadas...</option>
+            </select>
+            <button class="btn" id="btnDelete" disabled>Eliminar</button>
+          </div>
+        </div>
+
+        <!-- 2. Sección de Timeline y Animación -->
+        <div id="timelineSection" style="display:flex; flex-direction:column; gap:10px;">
+          <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Control de Animación</h3>
+          <div class="row">
+            <button class="btn grow" id="btnRecord">Grabar paso</button>
+            <div class="field">
+              <input type="checkbox" id="autoRec"> <label for="autoRec">Auto al soltar</label>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnPlay">Play</button>
+            <button class="btn" id="btnPause">Pause</button>
+            <button class="btn" id="btnStop">Stop</button>
+            <div class="field grow">
+              <label>Velocidad (ms)</label>
+              <input type="number" id="speed" min="100" step="100" value="800" style="width:100px"/>
+            </div>
+          </div>
+          <div class="field grow">
+            <label>Frame</label>
+            <input type="range" id="scrubber" min="0" max="0" value="0" class="grow"/>
+            <span id="scrubLbl" class="subtle">0/0</span>
+          </div>
+          <button class="btn" id="btnClrTl">Limpiar animación</button>
+        </div>
+      </aside>
+
+      <section class="board-viewport" id="boardViewport">
+        <div class="board-wrap" id="boardWrap">
+          <div class="board" id="board">
+            <!-- field lines -->
+            <svg class="lines" viewBox="0 0 1200 700" preserveAspectRatio="none" aria-hidden="true">
+              <rect x="5" y="5" width="1190" height="690" fill="none" stroke="#fff" stroke-width="6"/>
+              <rect x="0" y="0" width="80" height="700" fill="rgba(255,255,255,.07)"/>
+              <rect x="1120" y="0" width="80" height="700" fill="rgba(255,255,255,.07)"/>
+              <line x1="80" y1="0" x2="80" y2="700" stroke="#fff" stroke-width="4"/>
+              <line x1="1120" y1="0" x2="1120" y2="700" stroke="#fff" stroke-width="4"/>
+              <line x1="309" y1="0" x2="309" y2="700" stroke="#fff" stroke-width="3"/>
+              <line x1="891" y1="0" x2="891" y2="700" stroke="#fff" stroke-width="3"/>
+              <line x1="500" y1="0" x2="500" y2="700" stroke="#fff" stroke-width="2" stroke-dasharray="8 10"/>
+              <line x1="697" y1="0" x2="697" y2="700" stroke="#fff" stroke-width="2" stroke-dasharray="8 10"/>
+              <line x1="600" y1="0" x2="600" y2="700" stroke="#fff" stroke-width="4"/>
+              <line x1="5" y1="50" x2="1195" y2="50" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+              <line x1="5" y1="150" x2="1195" y2="150" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+              <line x1="5" y1="550" x2="1195" y2="550" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+              <line x1="5" y1="650" x2="1195" y2="650" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+              <line x1="130" y1="0" x2="130" y2="700" stroke="#fff" stroke-width="2" stroke-dasharray="8 10"/>
+              <line x1="1070" y1="0" x2="1070" y2="700" stroke="#fff" stroke-width="2" stroke-dasharray="8 10"/>
+            </svg>
+
+            <svg class="grid" id="grid" viewBox="0 0 1200 700" preserveAspectRatio="none"></svg>
+            <svg class="draw" id="draw" viewBox="0 0 1200 700" preserveAspectRatio="none"></svg>
+            <div id="players"></div>
+            <div id="ball" class="ball" title="Balón"></div>
+            <div id="selectionBox" style="display:none;"></div> <!-- Recuadro de selección -->
+          </div>
+        </div>
+        <canvas id="exportCanvas" width="1200" height="700" style="display:none"></canvas>
+      </section>
+    </main>
+
+    <!-- Bottom dock / Tools (Visible en Mobile/Tablet) -->
+    <footer class="dock" id="toolDock">
+      <div class="dock-inner">
+        <!-- Controles de dibujo: Solo para móvil -->
+        <div class="row mobile-drawing-controls">
+          <div class="seg" id="toolSegMobile">
+            <button id="toolArrowsMobile" class="active">Flechas</button>
+            <button id="toolPenMobile">Lápiz</button>
+          </div>
+          <div class="field">
+            <label>Color</label>
+            <select id="strokeColorMobile">
+              <option value="#ffffff">Blanco</option>
+              <option value="#35d07f">Verde</option>
+              <option value="#2f80ff">Azul</option>
+              <option value="#ff5a6b">Rojo</option>
+              <option value="#ffd400" selected>Amarillo</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Grosor</label>
+            <select id="strokeWidthMobile">
+              <option value="3">Fino</option>
+              <option value="5" selected>Medio</option>
+              <option value="7">Grueso</option>
+            </select>
+          </div>
+          <button class="btn" id="btnUndoMobile">Deshacer</button>
+          <button class="btn" id="btnClearMobile">Borrar</button>
+        </div>
+        
+        <!-- Controles de Jugada/Timeline para MÓVIL (ocultos en este dock en desktop) -->
+        <div id="mobilePlayControls">
+          <!-- Reubicamos los elementos de jugadas y timeline aquí para MÓVIL -->
+          <div class="row" style="margin-top: 10px;">
+            <div class="field grow">
+              <label class="subtle">Jugada</label>
+              <input type="text" id="playNameMobile" placeholder="Nombre de jugada" class="grow"/>
+            </div>
+            <button class="btn" id="btnDuplicateMobile" disabled>Duplicar</button>
+          </div>
+          <div class="row">
+            <select id="playListMobile" class="btn grow" disabled>
+              <option value="">Cargando jugadas...</option>
+            </select>
+            <button class="btn" id="btnLoadPlayMobile" disabled>Cargar</button>
+            <button class="btn" id="btnDeleteMobile" disabled>Eliminar</button>
+          </div>
+
+          <div class="row" style="margin-top: 10px;">
+            <span class="pill">Timeline</span>
+            <button class="btn" id="btnRecordMobile">Grabar</button>
+            <button class="btn" id="btnPlayMobile">Play</button>
+            <button class="btn" id="btnPauseMobile">Pause</button>
+            <button class="btn" id="btnStopMobile">Stop</button>
+            <div class="field grow">
+              <label>Frame</label>
+              <input type="range" id="scrubberMobile" min="0" max="0" value="0" class="grow"/>
+              <span id="scrubLblMobile" class="subtle">0/0</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </footer>
+  </div>
+  
+<script>
+// La lógica de inicialización de Firebase está en el bloque <script type="module">
+/* window.onload = () => {
+    window.initFirebaseAndApp();
+}; */
+
+/* ---------- Constantes ---------- */
+const WIDTH=1200, HEIGHT=700, GRID=24;
+
+// Coordenadas del campo (1200x700). Para simplificar el prompt de Gemini, mapeamos el campo a un grid de 12x7.
+const FIELD_GRID_W = 12;
+const FIELD_GRID_H = 7;
+const CELL_W = WIDTH / FIELD_GRID_W;
+const CELL_H = HEIGHT / FIELD_GRID_H;
+
+/* ---------- DOM ---------- */
+const boardViewport = document.getElementById('boardViewport');
+const boardWrap = document.getElementById('boardWrap');
+const board = document.getElementById('board');
+const playersLayer = document.getElementById('players');
+const draw = document.getElementById('draw');
+const gridSvg = document.getElementById('grid');
+const ball = document.getElementById('ball');
+const exportCanvas = document.getElementById('exportCanvas');
+const ctx = exportCanvas.getContext('2d');
+const selectionBox = document.getElementById('selectionBox'); 
+
+/* Topbar / acciones */
+const btnLandscape = document.getElementById('btnLandscape');
+const btnPortrait = document.getElementById('btnPortrait');
+const btnReset = document.getElementById('btnReset');
+const btnSavePlay = document.getElementById('btnSavePlay');
+const btnLoadPlay = document.getElementById('btnLoadPlay');
+const btnExportJpg = document.getElementById('btnExportJpg');
+const btnExportWebm = document.getElementById('btnExportWebm');
+const btnExportMp4 = document.getElementById('btnExportMp4');
+
+/* Dock herramientas (Desktop: en Sidepanel) */
+const toolArrows = document.getElementById('toolArrows');
+const toolPen = document.getElementById('toolPen');
+const strokeColor = document.getElementById('strokeColor');
+const strokeWidth = document.getElementById('strokeWidth');
+const dashed = document.getElementById('dashed');
+const snap = document.getElementById('snap');
+const showGrid = document.getElementById('showGrid');
+const btnUndo = document.getElementById('btnUndo');
+const btnClear = document.getElementById('btnClear');
+
+/* Gestión de Equipos (NUEVOS DOM IDS) */
+// const team1Name = document.getElementById('team1Name'); // COMENTADO: ya no se usa el DOM
+// const team2Name = document.getElementById('team2Name'); // COMENTADO: ya no se usa el DOM
+
+/* Jugadas (Desktop) */
+const playName = document.getElementById('playName');
+const btnDuplicate = document.getElementById('btnDuplicate');
+const playList = document.getElementById('playList');
+const btnDelete = document.getElementById('btnDelete');
+
+/* Timeline (Desktop) */
+const btnRecord = document.getElementById('btnRecord');
+const autoRec = document.getElementById('autoRec');
+const btnPlay = document.getElementById('btnPlay');
+const btnPause = document.getElementById('btnPause');
+const btnStop = document.getElementById('btnStop');
+const speed = document.getElementById('speed');
+const scrubber = document.getElementById('scrubber');
+const scrubLbl = document.getElementById('scrubLbl');
+
+/* Asistente Gemini */
+const btnGeminiAnalyze = document.getElementById('btnGeminiAnalyze');
+const geminiAssistantOutput = document.getElementById('geminiAssistantOutput');
+
+
+/* Jugadas/Timeline (Mobile - Nuevos IDs para evitar duplicados en el DOM) */
+const playNameMobile = document.getElementById('playNameMobile');
+const btnDuplicateMobile = document.getElementById('btnDuplicateMobile');
+const playListMobile = document.getElementById('playListMobile');
+const btnLoadPlayMobile = document.getElementById('btnLoadPlayMobile');
+const btnDeleteMobile = document.getElementById('btnDeleteMobile');
+const btnRecordMobile = document.getElementById('btnRecordMobile');
+const btnPlayMobile = document.getElementById('btnPlayMobile');
+const btnPauseMobile = document.getElementById('btnPauseMobile');
+const btnStopMobile = document.getElementById('btnStopMobile');
+const scrubberMobile = document.getElementById('scrubberMobile');
+const scrubLblMobile = document.getElementById('scrubLblMobile');
+// Nuevos DOM IDs para controles de dibujo en MÓVIL
+const toolArrowsMobile = document.getElementById('toolArrowsMobile');
+const toolPenMobile = document.getElementById('toolPenMobile');
+const strokeColorMobile = document.getElementById('strokeColorMobile');
+const strokeWidthMobile = document.getElementById('strokeWidthMobile');
+const btnUndoMobile = document.getElementById('btnUndoMobile');
+const btnClearMobile = document.getElementById('btnClearMobile');
+
+// Variables de estado del tablero
+let arrows=[], strokes=[], timeline=[];
+let teamConfig = { 
+    // Los datos iniciales del equipo se guardan aquí (se mantienen para compatibilidad con jugadas guardadas)
+    team1: { name: 'Equipo Azul', colorClass: 'team-1', hexColor: '#2f80ff' }, // blue
+    team2: { name: 'Equipo Rojo', colorClass: 'team-2', hexColor: '#ff5a6b' }  // red
+};
+const initialPositions=[];
+for(let i=1;i<=15;i++) initialPositions.push({team:'team-1', number:i, x:WIDTH*0.18,y:HEIGHT*(0.1+(i-1)*(0.8/14))});
+for(let i=1;i<=15;i++) initialPositions.push({team:'team-2', number:i, x:WIDTH*0.82,y:HEIGHT*(0.1+(i-1)*(0.8/14))});
+let currentBallPos={x:WIDTH/2,y:HEIGHT/2};
+let selectedPlayers = new Set(); // Conjunto para almacenar los elementos DOM de los jugadores seleccionados
+
+/* -------------------------------------------------------------------------- */
+/* ---------- Funciones de Persistencia (CON FALLBACK LOCAL) ---------------- */
+/* -------------------------------------------------------------------------- */
+
+function getPlayKey(name) {
+    return 'rb-play-' + name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+}
+
+// 1. Guardar Estado Completo (Jugada)
+async function savePlay(name) {
+    const playId = name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase(); 
+    const payload = { 
+        name: name,
+        positions: snapshotPlayers(), 
+        ball: snapshotBall(),
+        arrows: arrows, 
+        strokes: strokes, 
+        timeline: timeline,
+        // NUEVO: Guardar la configuración de equipos (aunque esté oculta, se guarda)
+        teamConfig: teamConfig,
+        updatedAt: new Date().toISOString()
+    };
+
+    if (window.db) {
+        // --- FIREBASE LOGIC (Cloud) ---
+        if (!window.db || !window.userId || !name) return console.error("DB no disponible o nombre inválido.");
+        try {
+            await window.setDoc(window.doc(window.getPlayCollectionRef(window.userId), playId), payload);
+            console.log(`Jugada '${name}' guardada con éxito en Firestore.`);
+            showStatus('Jugada guardada en la nube!', 'var(--accent2)');
+        } catch (e) {
+            console.error("Error al guardar jugada en Firestore:", e);
+            showStatus('Error al guardar: ' + e.message, 'var(--red)');
+        }
+    } else {
+        // --- LOCAL STORAGE FALLBACK (Local) ---
+        try {
+            localStorage.setItem(getPlayKey(playId), JSON.stringify(payload));
+            refreshPlayList();
+            playName.value = name;
+            playNameMobile.value = name;
+            showStatus('Jugada guardada LOCALMENTE!', 'var(--warn)');
+        } catch (e) {
+            console.error("Error saving to local storage:", e);
+            showStatus('ERROR: Espacio local insuficiente.', 'var(--red)');
+        }
+    }
+}
+
+// 2. Eliminar Jugada
+async function deletePlay(playId) {
+    if (!playId) return;
+
+    if (window.db) {
+        // --- FIREBASE LOGIC (Cloud) ---
+        try {
+            await window.deleteDoc(window.doc(window.getPlayCollectionRef(window.userId), playId));
+            console.log(`Jugada '${playId}' eliminada de Firestore.`);
+        } catch (e) {
+            console.error("Error al eliminar jugada:", e);
+            showStatus('Error al eliminar: ' + e.message, 'var(--red)');
+        }
+    } else {
+        // --- LOCAL STORAGE FALLBACK (Local) ---
+        localStorage.removeItem(getPlayKey(playId));
+        refreshPlayList();
+        showStatus('Jugada eliminada localmente.', 'var(--accent)');
+    }
+}
+
+// Función para aplicar la configuración de nombres a los jugadores en el DOM
+function applyTeamConfigToPlayers() {
+    [...playersLayer.children].forEach(el => {
+        const teamKey = el.dataset.team === 'team-1' ? 'team1' : 'team2';
+        const teamData = teamConfig[teamKey];
+        
+        // Asigna la clase CSS correcta ('team-1' o 'team-2') al jugador
+        el.className = `player ${teamData.colorClass}`;
+    });
+}
+
+// 3. Cargar Jugada Seleccionada (Unificada)
+function loadPlay(playId) {
+    // Usamos la lista de desktop como fuente de datos principal
+    const listToUse = window.innerWidth >= 1000 ? playList : playListMobile;
+    const option = Array.from(listToUse.options).find(opt => opt.value === playId);
+
+    if (!option || !option.dataset.payload) {
+        showStatus('Jugada no encontrada en la lista.', 'var(--red)');
+        return;
+    }
+
+    try {
+        const data = JSON.parse(option.dataset.payload);
+        
+        // SINCRONIZACIÓN DE CONFIGURACIÓN DE EQUIPOS
+        if (data.teamConfig) {
+            teamConfig = data.teamConfig;
+            
+            // COMENTADO: Ya no se actualizan los campos de entrada de nombres, ya que están ocultos.
+            // team1Name.value = teamConfig.team1.name;
+            // team2Name.value = teamConfig.team2.name;
+        }
+        
+        // Sincronizar campos de texto
+        playName.value = data.name || playId;
+        playNameMobile.value = data.name || playId;
+        
+        // 1. Cargar posiciones de jugadores
+        playersLayer.innerHTML = '';
+        selectedPlayers.clear(); // Limpiar selección al cargar
+        (data.positions || []).forEach(p => {
+            const el = document.createElement('div');
+            // Usar p.team que ahora debe ser 'team-1' o 'team-2'
+            el.className = `player ${p.team}`; 
+            el.textContent = p.number;
+            el.dataset.team = p.team; 
+            el.dataset.number = p.number;
+            el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+            enableDragPlayer(el, () => { if (autoRec.checked) recordFrame(); });
+            playersLayer.appendChild(el);
+        });
+        applyUprightTransforms();
+        applyTeamConfigToPlayers(); // Aplicar nombres/clases después de cargar DOM
+
+        // 2. Cargar balón
+        placeBall(data.ball.x, data.ball.y);
+        
+        // 3. Cargar dibujos y timeline
+        arrows = data.arrows || [];
+        strokes = data.strokes || [];
+        timeline = Array.isArray(data.timeline) ? data.timeline : [];
+        
+        renderDraw(); 
+        updateScrub(); 
+        if (timeline.length) gotoFrame(0);
+
+        showStatus(`Jugada '${data.name}' cargada con éxito.`, 'var(--accent)');
+
+    } catch (e) {
+        console.error("Error al parsear/cargar jugada:", e);
+        showStatus('Error al cargar la jugada.', 'var(--red)');
+    }
+}
+
+function populatePlayList(jugadas) {
+    [playList, playListMobile].forEach(list => {
+        list.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = jugadas.length > 0 ? '--- Seleccionar Jugada ---' : 'No hay jugadas guardadas';
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        list.appendChild(placeholder);
+        
+        jugadas.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j.id;
+            opt.textContent = j.name;
+            opt.dataset.payload = j.payload;
+            list.appendChild(opt);
+        });
+
+        list.disabled = false;
+    });
+
+    [btnLoadPlay, btnLoadPlayMobile, btnDelete, btnDeleteMobile].forEach(btn => {
+        if (btn) btn.disabled = false;
+    });
+}
+
+// 4. Suscripción/Refresco de la lista
+let unsubscribePlays = null;
+function refreshPlayList() {
+    if (window.db) {
+        // --- FIREBASE LOGIC (Cloud) ---
+        if (unsubscribePlays) unsubscribePlays();
+        if (!window.db || !window.userId) return;
+
+        const q = window.query(window.getPlayCollectionRef(window.userId));
+
+        unsubscribePlays = window.onSnapshot(q, (snapshot) => {
+            const jugadas = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                jugadas.push({ id: doc.id, name: data.name || doc.id, payload: JSON.stringify(data) });
+            });
+            jugadas.sort((a, b) => a.name.localeCompare(b.name));
+            populatePlayList(jugadas);
+        }, (error) => {
+            console.error("Error al escuchar jugadas:", error);
+            showStatus('Error al cargar la lista de jugadas desde la nube.', 'var(--red)');
+        });
+    } else {
+        // --- LOCAL STORAGE FALLBACK (Local) ---
+        if (unsubscribePlays) { unsubscribePlays(); unsubscribePlays = null; } // Asegurar que no hay listeners de Firebase
+
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('rb-play-')).sort();
+        const jugadas = [];
+
+        keys.forEach(k => {
+            try {
+                const data = JSON.parse(localStorage.getItem(k));
+                const id = k.replace('rb-play-', '');
+                jugadas.push({ id: id, name: data.name || id, payload: JSON.stringify(data) });
+            } catch {}
+        });
+        
+        jugadas.sort((a, b) => a.name.localeCompare(b.name));
+        populatePlayList(jugadas);
+    }
+}
+/* -------------------------------------------------------------------------- */
+
+
+/* ---------- Eventos de Configuración de Equipos ---------- */
+
+// COMENTADO: Mapear cambios de nombre de equipo 1 (Azul)
+// team1Name.addEventListener('input', () => {
+//     teamConfig.team1.name = team1Name.value;
+// });
+
+// COMENTADO: Mapear cambios de nombre de equipo 2 (Rojo)
+// team2Name.addEventListener('input', () => {
+//     teamConfig.team2.name = team2Name.value;
+// });
+
+/* ---------- Eventos de Persistencia (Mapeo a funciones unificadas) ---------- */
+
+// Eventos para Desktop
+btnSavePlay.addEventListener('click', async () => {
+    const name = (playName.value || playNameMobile.value || '').trim(); 
+    if(!name) { showStatus('¡Poné un nombre para guardar la jugada!', 'var(--warn)'); return; }
+    await savePlay(name);
+});
+
+btnDelete.addEventListener('click', async () => {
+    const playId = playList.value; 
+    if (!playId) { showStatus('Elegí una jugada para eliminar.', 'var(--warn)'); return; }
+    if (!confirm(`¿Estás seguro de eliminar la jugada "${playList.options[playList.selectedIndex].textContent}"?`)) return;
+    await deletePlay(playId);
+});
+
+btnLoadPlay.addEventListener('click', () => {
+    if (!playList.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
+    loadPlay(playList.value);
+});
+
+playList.addEventListener('change', () => { 
+    const selectedOption = playList.options[playList.selectedIndex];
+    playName.value = selectedOption.textContent;
+    playNameMobile.value = selectedOption.textContent;
+    playListMobile.value = selectedOption.value;
+});
+
+// Eventos para Mobile (Sincronización)
+playNameMobile.addEventListener('input', () => { playName.value = playNameMobile.value; });
+btnLoadPlayMobile.addEventListener('click', () => { 
+    if (!playListMobile.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
+    loadPlay(playListMobile.value);
+});
+playListMobile.addEventListener('change', () => {
+    const selectedOption = playListMobile.options[playListMobile.selectedIndex];
+    playName.value = selectedOption.textContent;
+    playNameMobile.value = selectedOption.textContent;
+    playList.value = selectedOption.value;
+});
+btnDeleteMobile.addEventListener('click', async () => {
+    const playId = playListMobile.value; 
+    if (!playId) { showStatus('Elegí una jugada para eliminar.', 'var(--warn)'); return; }
+    if (!confirm(`¿Estás seguro de eliminar la jugada "${playListMobile.options[playListMobile.selectedIndex].textContent}"?`)) return;
+    await deletePlay(playId);
+});
+
+
+/* ---------- Utilidades Generales de UI/Estado ---------- */
+
+function showStatus(message, color='var(--accent)'){
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'status-message';
+    statusDiv.textContent = message;
+    statusDiv.style.cssText = `
+        position: fixed; top: 70px; right: 20px;
+        background: ${color}; color: var(--bg); padding: 10px 15px;
+        border-radius: 8px; z-index: 9999; opacity: 0;
+        transition: opacity 0.5s ease-in-out;
+    `;
+    document.body.appendChild(statusDiv);
+    
+    setTimeout(() => { statusDiv.style.opacity = 1; }, 10);
+    setTimeout(() => { statusDiv.style.opacity = 0; }, 3000);
+    setTimeout(() => { statusDiv.remove(); }, 3500);
+}
+
+
+/* ------------------------------------------------------------------ */
+/* ---------- Lógica de Layout y Adaptabilidad (REVISADA) ---------- */
+/* ------------------------------------------------------------------ */
+let layout={mode:'landscape', scale:1, tx:0, ty:0};
+let forcePortrait=false;
+
+function setSegActive(segBtn, otherBtn){
+  segBtn.classList.add('active'); otherBtn.classList.remove('active');
+}
+
+btnLandscape.addEventListener('click', ()=>{ forcePortrait=false; setSegActive(btnLandscape,btnPortrait); fitBoard(); });
+btnPortrait.addEventListener('click', ()=>{ forcePortrait=true; setSegActive(btnPortrait,btnLandscape); fitBoard(); });
+
+function isPortraitLike(){
+  if (forcePortrait) return true;
+  const mq=window.matchMedia('(orientation: portrait)');
+  return (mq && mq.matches) || (window.innerHeight>window.innerWidth);
+}
+
+function applyUprightTransforms(){
+  // Esta función gira los jugadores si el campo está rotado (modo portrait)
+  const rotatePlayers=(layout.mode==='portrait');
+  [...playersLayer.children].forEach(el=>{
+    // Rotamos -90deg para compensar la rotación de 90deg del board-wrap
+    el.style.transform = rotatePlayers
+      ? 'translate(-50%,-50%) rotate(-90deg)' 
+      : 'translate(-50%,-50%)';
+  });
+}
+
+function fitBoard(){
+  const vp=boardViewport.getBoundingClientRect();
+  const availW=vp.width, availH=vp.height;
+
+  // DIMENSIONES BASE DEL CAMPO (1200 x 700)
+  const baseW = WIDTH;
+  const baseH = HEIGHT;
+
+  let currentW, currentH; // Dimensiones del campo tal como se verá en el viewport
+  let scale;
+
+  if (!isPortraitLike()){
+    // Orientación Horizontal (Paisaje)
+    layout.mode='landscape';
+    currentW = baseW;
+    currentH = baseH;
+    
+    // Escala el campo para que se ajuste al 100% del contenedor
+    scale = Math.min(availW/currentW, availH/currentH);
+    
+    layout.scale=scale;
+    
+    // Centrado: calcula la traducción (tx, ty) para centrar el campo escalado
+    // CORRECCIÓN DE CENTRADO: Ya no necesitamos tx/ty en la transformación porque el CSS (display:flex)
+    // se encarga del centrado. Simplemente pasamos el offset de escala a clientToBoard.
+    layout.tx = (availW - currentW * scale) / 2;
+    layout.ty = (availH - currentH * scale) / 2;
+    
+    // Aplica transformación: SOLO escalado
+    boardWrap.style.transform=`scale(${scale})`;
+    boardWrap.style.transformOrigin='center center'; // Centrado desde el centro para flexbox
+  } else {
+    // Orientación Vertical (Retrato)
+    layout.mode='portrait';
+    
+    // El campo rotado 90 grados tiene dimensiones HxW (700 x 1200)
+    currentW = baseH; // 700
+    currentH = baseW; // 1200
+    
+    // Escala el campo rotado para que se ajuste
+    scale = Math.min(availW/currentW, availH/currentH);
+
+    layout.scale=scale;
+    
+    // Centrado del contenedor ROTADO (Aseguramos que la rotación se haga alrededor del centro)
+    
+    // Rotamos 90 grados alrededor del centro del wrap
+    // El wrap (1200x700) se centra dentro del viewport (availWxavailH) por CSS (flexbox).
+    // Solo necesitamos aplicar la rotación y la escala.
+    
+    // Aplicamos transformación: Rotación y escalado alrededor del centro (50% 50%)
+    boardWrap.style.transform=`rotate(90deg) scale(${scale})`;
+    boardWrap.style.transformOrigin='center center'; // Rotación y escala desde el centro
+    
+    // Calculamos el offset de centrado para el cálculo de coordenadas, aunque CSS haga el trabajo visual.
+    const scaledRotatedW = baseH * scale;
+    const scaledRotatedH = baseW * scale;
+
+    layout.tx = (availW - scaledRotatedW) / 2; // Offset X del rectangulo rotado y escalado
+    layout.ty = (availH - scaledRotatedH) / 2; // Offset Y del rectangulo rotado y escalado
+
+  }
+
+  applyUprightTransforms();
+}
+
+/* ---------- Utilidades coordenadas (CORREGIDA) ---------- */
+function clientToBoard(e){
+  const vp=boardViewport.getBoundingClientRect();
+  const cx=e.clientX - vp.left;
+  const cy=e.clientY - vp.top;
+  
+  if (layout.mode==='portrait'){
+    // FIX: Ahora que usamos flexbox y transform-origin:center center,
+    // el punto 0,0 del tablero rotado se mueve.
+    // 1. Recalcular las coordenadas relativas al centro del viewport.
+    const centerX = vp.width / 2;
+    const centerY = vp.height / 2;
+
+    const px = cx - centerX;
+    const py = cy - centerY;
+
+    // 2. Deshacer la rotación de 90 grados (CW) en el sistema de coordenadas.
+    // x_rot = y_orig (invertido)
+    // y_rot = x_orig
+    // Deshacer (CCW -90deg):
+    // x_board = py (mapeado a Y)
+    // y_board = -px (mapeado a X, y luego invertido)
+    
+    // Corregimos la asignación de signos para el cálculo del punto de clic/selección
+    const x_board_scaled = py;
+    const y_board_scaled = -px;
+
+    // 3. Aplicar la escala y mover al origen (0,0) del tablero (1200x700).
+    // El eje X del tablero (1200) es el largo. El Y (700) es el ancho.
+    const x_board = (WIDTH / 2) + (x_board_scaled / layout.scale);
+    const y_board = (HEIGHT / 2) + (y_board_scaled / layout.scale);
+
+    return { x:clamp(x_board,0,WIDTH), y:clamp(y_board,0,HEIGHT) };
+    
+  } else {
+    // Modo horizontal
+    // Centrado de Flexbox: Coordenadas relativas al 0,0 del viewport.
+    const scaledW = WIDTH * layout.scale;
+    const scaledH = HEIGHT * layout.scale;
+    
+    const x = (cx - (vp.width - scaledW) / 2) / layout.scale;
+    const y = (cy - (vp.height - scaledH) / 2) / layout.scale;
+
+    return { x:clamp(x,0,WIDTH), y:clamp(y,0,HEIGHT) };
+  }
+}
+
+function deltaToBoard(dxClient, dyClient){
+  if (layout.mode==='portrait'){
+    // Movimiento basado en la rotación del viewport (90 deg CW).
+    // dx_board = +dy_client
+    // dy_board = -dx_client
+    return { 
+        dx: dyClient / layout.scale,  
+        dy: -dxClient / layout.scale 
+    };
+  }else{
+    return { dx: dxClient / layout.scale, dy: dyClient / layout.scale };
+  }
+}
+
+function snapVal(v){ return Math.round(v/GRID)*GRID; }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+function dist(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return Math.hypot(dx,dy); }
+function centerOf(el){ return { x:parseFloat(el.style.left)||0, y:parseFloat(el.style.top)||0 } }
+function rectIntersect(rect1, rect2) {
+    return rect1.left < rect2.right &&
+           rect1.right > rect2.left &&
+           rect1.top < rect2.bottom &&
+           rect1.bottom > rect2.top;
+}
+function clearPlayerSelection() {
+    selectedPlayers.forEach(el => el.classList.remove('selected'));
+    selectedPlayers.clear();
+}
+
+/* ---------- Grilla (Copia de la original) ---------- */
+function renderGrid(){
+  gridSvg.innerHTML='';
+  if (!showGrid.checked) { gridSvg.classList.remove('on'); return; }
+  gridSvg.classList.add('on');
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  for(let x=GRID;x<WIDTH;x+=GRID){
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',x); l.setAttribute('y1',0); l.setAttribute('x2',x); l.setAttribute('y2',HEIGHT);
+    l.setAttribute('stroke','rgba(255,255,255,.08)'); l.setAttribute('stroke-width','1');
+    g.appendChild(l);
+  }
+  for(let y=GRID;y<HEIGHT;y+=GRID){
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',0); l.setAttribute('y1',y); l.setAttribute('x2',WIDTH); l.setAttribute('y2',y);
+    l.setAttribute('stroke','rgba(255,255,255,.08)'); l.setAttribute('stroke-width','1');
+    g.appendChild(l);
+  }
+  gridSvg.appendChild(g);
+}
+showGrid.addEventListener('change', renderGrid);
+
+/* ---------- Jugadores y balón (Modificado para usar currentBallPos) ---------- */
+function createPlayers(){
+  playersLayer.innerHTML='';
+  selectedPlayers.clear(); // Limpiar selección al reiniciar
+  initialPositions.forEach(p=>{
+    const el=document.createElement('div');
+    // Usamos el colorClass definido en teamConfig
+    const teamData = p.team === 'team-1' ? teamConfig.team1 : teamConfig.team2;
+    el.className=`player ${teamData.colorClass}`; 
+    el.textContent=p.number;
+    el.dataset.team=p.team; 
+    el.dataset.number=p.number;
+    el.style.left=p.x+'px'; el.style.top=p.y+'px';
+    enableDragPlayer(el, (isGroupMove)=>{ if (!isGroupMove && autoRec.checked) recordFrame(); });
+    playersLayer.appendChild(el);
+  });
+  applyUprightTransforms();
+}
+
+function placeBall(x=WIDTH/2,y=HEIGHT/2){
+  currentBallPos.x=x; currentBallPos.y=y;
+  ball.style.left=x+'px'; ball.style.top=y+'px';
+  ball.style.transform='translate(-50%,-50%) rotate(-15deg)';
+}
+
+function ballOverPlayer(playerEl, threshold=28){
+  const b=centerOf(ball), p=centerOf(playerEl);
+  return dist(b.x,b.y,p.x,p.y)<threshold;
+}
+
+/* Drag jugador (arrastra balón si estaba encima) (MODIFICADO para movimiento masivo) */
+function enableDragPlayer(playerEl, onDrop){
+  let pid=null, sx=0, sy=0, ox=0, oy=0;
+  let lockBall=false, offX=0, offY=0;
+  let isGroupMove = false; // Flag para movimiento de grupo
+  let playerOffsets = []; // Almacena offsets iniciales para el grupo
+
+  const down=e=>{
+    pid=e.pointerId; playerEl.setPointerCapture(pid); e.preventDefault();
+    sx=e.clientX; sy=e.clientY;
+    ox=parseFloat(playerEl.style.left)||0;
+    oy=parseFloat(playerEl.style.top)||0;
+
+    // Si el jugador no estaba seleccionado, borra la selección anterior
+    if (!playerEl.classList.contains('selected')) {
+        clearPlayerSelection();
+        playerEl.classList.add('selected');
+        selectedPlayers.add(playerEl);
+    }
+    
+    isGroupMove = selectedPlayers.has(playerEl) && selectedPlayers.size > 1;
+
+    // Si es movimiento de grupo, precalculamos offsets
+    if (isGroupMove) {
+        playerOffsets = Array.from(selectedPlayers).map(el => ({
+            el: el,
+            offsetX: parseFloat(el.style.left) - ox,
+            offsetY: parseFloat(el.style.top) - oy,
+            initialX: parseFloat(el.style.left),
+            initialY: parseFloat(el.style.top),
+        }));
+    }
+
+    lockBall=ballOverPlayer(playerEl);
+    if (lockBall){
+      const p0={x:ox,y:oy}, b0=centerOf(ball);
+      offX=b0.x-p0.x; offY=b0.y-p0.y;
+    }
+
+    const move=ev=>{
+      if (ev.pointerId!==pid) return; ev.preventDefault();
+      const {dx,dy}=deltaToBoard(ev.clientX-sx, ev.clientY-sy);
+      
+      let nx_main=clamp(ox+dx,0,WIDTH), ny_main=clamp(oy+dy,0,HEIGHT);
+      
+      if (isGroupMove) {
+          // Mover todo el grupo
+          playerOffsets.forEach(p => {
+              let nx_p = clamp(p.initialX + dx, 0, WIDTH);
+              let ny_p = clamp(p.initialY + dy, 0, HEIGHT);
+              p.el.style.left = nx_p + 'px';
+              p.el.style.top = ny_p + 'px';
+          });
+          // El jugador principal (el arrastrado) ya se mueve con el grupo,
+          // pero el cálculo de bloqueo de balón sigue el arrastrado.
+          playerEl.style.left = nx_main + 'px';
+          playerEl.style.top = ny_main + 'px';
+
+      } else {
+          // Movimiento de un solo jugador
+          playerEl.style.left=nx_main+'px'; playerEl.style.top=ny_main+'px';
+      }
+
+      if (lockBall){
+        const bx=clamp(nx_main+offX,0,WIDTH), by=clamp(ny_main+offY,0,HEIGHT);
+        placeBall(bx,by);
+      }
+    };
+    const up=ev=>{
+      if (ev.pointerId!==pid) return;
+      try{playerEl.releasePointerCapture(pid);}catch{}
+      document.removeEventListener('pointermove',move);
+      document.removeEventListener('pointerup',up);
+      
+      // Aplicar Snap (la lógica es compleja si no usamos las posiciones iniciales)
+      if (snap.checked){
+          // Calcular el desplazamiento total del jugador principal y aplicarlo al grupo
+          const finalX = parseFloat(playerEl.style.left);
+          const finalY = parseFloat(playerEl.style.top);
+          
+          const snappedX = snapVal(finalX);
+          const snappedY = snapVal(finalY);
+          
+          const snapDx = snappedX - finalX;
+          const snapDy = snappedY - finalY;
+          
+          const snappedPlayers = isGroupMove ? Array.from(selectedPlayers) : [playerEl];
+
+          snappedPlayers.forEach(el => {
+            const currentX = parseFloat(el.style.left);
+            const currentY = parseFloat(el.style.top);
+            
+            el.style.left = clamp(currentX + snapDx, 0, WIDTH) + 'px';
+            el.style.top = clamp(currentY + snapDy, 0, HEIGHT) + 'px';
+          });
+          
+          if (lockBall) {
+              const currentBX = currentBallPos.x;
+              const currentBY = currentBallPos.y;
+              placeBall(clamp(currentBX + snapDx, 0, WIDTH), clamp(currentBY + snapDy, 0, HEIGHT));
+          }
+      }
+      
+      onDrop && onDrop(isGroupMove);
+    };
+    document.addEventListener('pointermove',move,{passive:false});
+    document.addEventListener('pointerup',up,{passive:false});
+  };
+  playerEl.addEventListener('pointerdown',down,{passive:false});
+  playerEl.ondragstart=()=>false;
+}
+
+/* Drag balón: con línea de pase (Modificado para usar placeBall) */
+function enableDragBall(onDrop){
+  let pid=null, sx=0, sy=0, ox=0, oy=0, passer=null;
+
+  const down=e=>{
+    pid=e.pointerId; ball.setPointerCapture(pid); e.preventDefault();
+    sx=e.clientX; sy=e.clientY; ox=currentBallPos.x; oy=currentBallPos.y;
+    
+    // Al tocar el balón, se borra la selección de jugadores
+    clearPlayerSelection();
+
+    // detectar jugador “pasador” (si el balón iniciaba encima)
+    const b0=centerOf(ball);
+    passer=(()=>{
+      let best=null,bestD=Infinity;
+      for(const el of playersLayer.children){
+        const p=centerOf(el), d=dist(b0.x,b0.y,p.x,p.y);
+        if (d<28 && d<bestD){ best=el; bestD=d; }
+      }
+      return best;
+    })();
+    if (passer){ const p=centerOf(passer); showPassPreview(p.x,p.y,b0.x,b0.y); }
+
+    const move=ev=>{
+      if (ev.pointerId!==pid) return; ev.preventDefault();
+      const {dx,dy}=deltaToBoard(ev.clientX-sx, ev.clientY-sy);
+      let nx=clamp(ox+dx,0,WIDTH), ny=clamp(oy+dy,0,HEIGHT);
+      placeBall(nx,ny);
+      if (passer){ const p=centerOf(passer); showPassPreview(p.x,p.y,nx,ny); }
+    };
+    const up=ev=>{
+      if (ev.pointerId!==pid) return;
+      try{ball.releasePointerCapture(pid);}catch{}
+      document.removeEventListener('pointermove',move);
+      document.removeEventListener('pointerup',up);
+      if (snap.checked){
+        placeBall(snapVal(currentBallPos.x), snapVal(currentBallPos.y));
+      }
+      hidePassPreview();
+      onDrop && onDrop();
+    };
+    document.addEventListener('pointermove',move,{passive:false});
+    document.addEventListener('pointerup',up,{passive:false});
+  };
+  ball.addEventListener('pointerdown',down,{passive:false});
+  ball.ondragstart=()=>false;
+}
+
+/* ---------- Lógica de Selección Masiva (Nueva Función) ---------- */
+function enableSelectionBox() {
+    let pid = null, startBoard = null, startClient = null;
+
+    const down = (e) => {
+        // Solo activa el recuadro si no se está tocando un jugador o el balón,
+        // y si la tecla Shift está pulsada (para desktop) O si es un toque (para móvil).
+        const isPlayerOrBall = e.target.closest('.player') || e.target.closest('#ball');
+        const isShiftDown = e.shiftKey;
+        
+        if (isPlayerOrBall || tool !== 'arrows') { 
+            // Si tocamos un elemento movible o no estamos en modo Flechas, no activamos el recuadro.
+            return;
+        }
+        
+        // Si ya estamos dibujando una flecha/lápiz, no permitimos el recuadro de selección.
+        if (drawingArrow || drawingStroke) return;
+
+        // Limpiar selección anterior al iniciar un nuevo recuadro
+        clearPlayerSelection();
+
+        pid = e.pointerId; 
+        board.setPointerCapture(pid); 
+        e.preventDefault();
+        
+        // **INICIO DE CORRECCIÓN PARA EL RECUAEDRO EN MODO PORTRAIT**
+        // Obtenemos las coordenadas del tablero para el punto de inicio del clic.
+        startBoard = clientToBoard(e); 
+        
+        selectionBox.style.left = startBoard.x + 'px';
+        selectionBox.style.top = startBoard.y + 'px';
+        selectionBox.style.width = '0';
+        selectionBox.style.height = '0';
+        selectionBox.style.display = 'block';
+
+        board.addEventListener('pointermove', move);
+        board.addEventListener('pointerup', up);
+    };
+
+    const move = (e) => {
+        if (e.pointerId !== pid) return;
+        e.preventDefault();
+
+        const currentBoard = clientToBoard(e); // Punto actual en coordenadas del tablero
+        
+        // Calcular el rectángulo en coordenadas del tablero (1200x700)
+        // Usamos Math.min/max para manejar el arrastre en cualquier dirección
+        const left = Math.min(startBoard.x, currentBoard.x);
+        const top = Math.min(startBoard.y, currentBoard.y);
+        const right = Math.max(startBoard.x, currentBoard.x);
+        const bottom = Math.max(startBoard.y, currentBoard.y);
+        
+        const width = right - left;
+        const height = bottom - top;
+
+        selectionBox.style.left = left + 'px';
+        selectionBox.style.top = top + 'px';
+        selectionBox.style.width = width + 'px';
+        selectionBox.style.height = height + 'px';
+
+        // Detectar jugadores dentro del recuadro
+        const selectionRect = { left: left, top: top, right: right, bottom: bottom };
+        
+        // Limpiar la clase 'selected' de todos los jugadores si no están en la selección
+        playersLayer.querySelectorAll('.player').forEach(playerEl => {
+            const pX = parseFloat(playerEl.style.left);
+            const pY = parseFloat(playerEl.style.top);
+            
+            // Margen de 20px (radio del jugador) para detectar colisión
+            const playerRect = { 
+                left: pX - 20, 
+                top: pY - 20, 
+                right: pX + 20, 
+                bottom: pY + 20 
+            };
+            
+            if (rectIntersect(selectionRect, playerRect)) {
+                playerEl.classList.add('selected');
+                selectedPlayers.add(playerEl);
+            } else {
+                playerEl.classList.remove('selected');
+                selectedPlayers.delete(playerEl);
+            }
+        });
+    };
+
+    const up = (e) => {
+        if (e.pointerId !== pid) return;
+        try{board.releasePointerCapture(pid);}catch{}
+        board.removeEventListener('pointermove', move);
+        board.removeEventListener('pointerup', up);
+
+        selectionBox.style.display = 'none';
+        pid = null;
+        startBoard = null;
+        startClient = null;
+    };
+
+    board.addEventListener('pointerdown', down);
+}
+/* -------------------------------------------------------------------------- */
+
+
+/* ---------- Pase (línea punteada temporal) (Copia de la original) ---------- */
+function showPassPreview(x1,y1,x2,y2){
+  let line=draw.querySelector('#passPreview');
+  if (!line){
+    line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('id','passPreview');
+    line.setAttribute('stroke','#fff'); line.setAttribute('stroke-width','3');
+    line.setAttribute('stroke-dasharray','10 8'); line.setAttribute('vector-effect','non-scaling-stroke');
+    draw.appendChild(line);
+  }
+  line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+  line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+}
+function hidePassPreview(){ const l=draw.querySelector('#passPreview'); if(l) l.remove(); }
+
+/* ---------- Dibujo (flechas / lápiz) (Copia de la original) ---------- */
+let tool='arrows';
+toolArrows.addEventListener('click',()=>{ tool='arrows'; toolArrows.classList.add('active'); toolPen.classList.remove('active'); clearPlayerSelection(); });
+toolPen.addEventListener('click',()=>{ tool='pen'; toolPen.classList.add('active'); toolArrows.classList.remove('active'); clearPlayerSelection(); });
+// Mapeo de eventos de dibujo para móvil
+toolArrowsMobile.addEventListener('click',()=>{ tool='arrows'; toolArrowsMobile.classList.add('active'); toolPenMobile.classList.remove('active'); clearPlayerSelection(); });
+toolPenMobile.addEventListener('click',()=>{ tool='pen'; toolPenMobile.classList.add('active'); toolArrowsMobile.classList.remove('active'); clearPlayerSelection(); });
+
+
+let drawingArrow=false, startPt=null, drawingStroke=false, currentStroke=null;
+
+function ensureDefs(){
+  if (draw.querySelector('defs')) return;
+  const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const mk=(id,color)=>{
+    const m=document.createElementNS('http://www.w3.org/2000/svg','marker');
+    m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
+    m.setAttribute('refX','9'); m.setAttribute('refY','5'); m.setAttribute('orient','auto');
+    const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points','0 0, 10 5, 0 10'); poly.setAttribute('fill',color);
+    m.appendChild(poly); defs.appendChild(m);
+  };
+  mk('awh','#ffffff'); mk('agr','#35d07f'); mk('abl','#2f80ff'); mk('ard','#ff5a6b'); mk('ayl','#ffd400');
+  draw.appendChild(defs);
+}
+function markerId(c){ return ({'#ffffff':'awh','#35d07f':'agr','#2f80ff':'abl','#ff5a6b':'ard','#ffd400':'ayl'})[c]||'ayl'; }
+
+function renderDraw(){
+  ensureDefs();
+  const defs=draw.querySelector('defs');
+  [...draw.childNodes].forEach(n=>{ if(n!==defs && n.id!=='passPreview') draw.removeChild(n); });
+  strokes.forEach(s=>{
+    const pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    pl.setAttribute('fill','none');
+    pl.setAttribute('stroke', s.color||'#ffd400');
+    pl.setAttribute('stroke-width', s.width||5);
+    if (s.dashed) pl.setAttribute('stroke-dasharray','8 8');
+    pl.setAttribute('vector-effect','non-scaling-stroke');
+    pl.setAttribute('points', s.points.join(' '));
+    draw.insertBefore(pl, draw.querySelector('#passPreview')||null);
+  });
+  arrows.forEach(a=>{
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1',a.x1); ln.setAttribute('y1',a.y1); ln.setAttribute('x2',a.x2); ln.setAttribute('y2',a.y2);
+    ln.setAttribute('stroke',a.color||'#ffd400'); ln.setAttribute('stroke-width',a.width||5);
+    if (a.dashed) ln.setAttribute('stroke-dasharray','8 8');
+    ln.setAttribute('marker-end',`url(#${markerId(a.color||'#ffd400')})`);
+    ln.setAttribute('vector-effect','non-scaling-stroke');
+    draw.insertBefore(ln, draw.querySelector('#passPreview')||null);
+  });
+}
+
+// Sincronizar colores y grosor de dibujo (Desktop a Mobile y viceversa)
+function syncDrawingTools(){
+    if (window.innerWidth >= 1000) {
+        // Desktop a Mobile
+        strokeColorMobile.value = strokeColor.value;
+        strokeWidthMobile.value = strokeWidth.value;
+        if (tool === 'arrows') { toolArrowsMobile.classList.add('active'); toolPenMobile.classList.remove('active'); }
+        else { toolArrowsMobile.classList.remove('active'); toolPenMobile.classList.add('active'); }
+    } else {
+        // Mobile a Desktop
+        strokeColor.value = strokeColorMobile.value;
+        strokeWidth.value = strokeWidthMobile.value;
+        if (tool === 'arrows') { toolArrows.classList.add('active'); toolPen.classList.remove('active'); }
+        else { toolArrows.classList.remove('active'); toolPen.classList.add('active'); }
+    }
+}
+strokeColor.addEventListener('change', syncDrawingTools);
+strokeWidth.addEventListener('change', syncDrawingTools);
+strokeColorMobile.addEventListener('change', syncDrawingTools);
+strokeWidthMobile.addEventListener('change', syncDrawingTools);
+
+board.addEventListener('pointerdown',e=>{
+  if (e.target.closest('.player') || e.target.closest('#ball')) return;
+  // Si estamos en modo selección masiva, no hacemos dibujos.
+  if (tool === 'arrows' && e.shiftKey) return; 
+
+  try{board.setPointerCapture(e.pointerId);}catch{}
+  let p=clientToBoard(e);
+  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  
+  // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
+  const currentStrokeColor = window.innerWidth >= 1000 ? strokeColor.value : strokeColorMobile.value;
+  const currentStrokeWidth = parseInt(window.innerWidth >= 1000 ? strokeWidth.value : strokeWidthMobile.value, 10) || 5;
+
+  if (tool==='arrows'){ drawingArrow=true; startPt={x:p.x,y:p.y}; }
+  else {
+    drawingStroke=true;
+    currentStroke={ 
+        points:[`${p.x},${p.y}`], 
+        color:currentStrokeColor, 
+        width:currentStrokeWidth, 
+        dashed:!!dashed.checked 
+    };
+    strokes.push(currentStroke); renderDraw();
+  }
+},{passive:false});
+
+board.addEventListener('pointermove',e=>{
+  if (tool==='arrows' && e.shiftKey) return; // Si estamos en modo selección, ignoramos movimiento de dibujo
+  if (tool!=='pen' || !drawingStroke || !currentStroke) return;
+  let p=clientToBoard(e);
+  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  const last=currentStroke.points[currentStroke.points.length-1];
+  const [lx,ly]=last.split(',').map(Number);
+  if (Math.abs(p.x-lx)+Math.abs(p.y-ly) > 0.5){
+    currentStroke.points.push(`${p.x},${p.y}`); renderDraw();
+  }
+},{passive:false});
+
+board.addEventListener('pointerup',e=>{
+  if (tool==='arrows' && e.shiftKey) return; // Si estamos en modo selección, ignoramos up de dibujo
+  try{board.releasePointerCapture(pid);}catch{}
+  let p=clientToBoard(e);
+  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  
+  // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
+  const currentStrokeColor = window.innerWidth >= 1000 ? strokeColor.value : strokeColorMobile.value;
+  const currentStrokeWidth = parseInt(window.innerWidth >= 1000 ? strokeWidth.value : strokeWidthMobile.value, 10) || 5;
+
+  if (tool==='arrows' && drawingArrow && startPt){
+    arrows.push({ 
+        x1:startPt.x, 
+        y1:startPt.y, 
+        x2:p.x, 
+        y2:p.y, 
+        color:currentStrokeColor, 
+        width:currentStrokeWidth, 
+        dashed:!!dashed.checked 
+    });
+    drawingArrow=false; startPt=null; renderDraw();
+  }else if (tool==='pen' && drawingStroke && currentStroke){
+    drawingStroke=false; renderDraw();
+  }
+},{passive:false});
+
+// Mapeo de eventos de deshacer/limpiar para Mobile
+btnUndo.addEventListener('click',()=>{
+  if (tool==='arrows'){ arrows.pop(); }
+  else { strokes.pop(); }
+  renderDraw();
+});
+btnUndoMobile.addEventListener('click',()=>{
+  if (tool==='arrows'){ arrows.pop(); }
+  else { strokes.pop(); }
+  renderDraw();
+});
+btnClear.addEventListener('click',()=>{ arrows=[]; strokes=[]; renderDraw(); });
+btnClearMobile.addEventListener('click',()=>{ arrows=[]; strokes=[]; renderDraw(); });
+
+
+/* ---------- Timeline (Copia de la original) ---------- */
+const TLKEY='rb-timeline'; // Ya no se usa local storage
+let playing=false, paused=false, playIdx=0, rafId=null, segStart=0, segDur=800;
+let fromF=null, toF=null;
+
+function snapshotPlayers(){ return [...playersLayer.children].map(el=>({team:el.dataset.team, number:+el.dataset.number, x:parseFloat(el.style.left), y:parseFloat(el.style.top)})); }
+function snapshotBall(){ return {...currentBallPos}; }
+function snapshotFrame(){ return { players: snapshotPlayers(), ball: snapshotBall() }; }
+
+function recordFrame(){ timeline.push(snapshotFrame()); updateScrub(); }
+// Mapeo de eventos de grabación
+btnRecord.addEventListener('click',recordFrame);
+btnRecordMobile.addEventListener('click',recordFrame);
+
+
+function updateScrub(){
+  // Actualizar los scrubbers de desktop y mobile
+  [scrubber, scrubberMobile].forEach(s => {
+    s.max = Math.max(0, timeline.length - 1);
+    const v = parseInt(s.value, 10) || 0;
+    if (v > s.max) s.value = s.max;
+  });
+  
+  // Actualizar las etiquetas de estado
+  const currentFrame = parseInt(scrubber.value, 10) || 0;
+  const maxFrame = scrubber.max;
+  const label = `${currentFrame}/${maxFrame}`;
+  
+  scrubLbl.textContent = label;
+  scrubLblMobile.textContent = label;
+}
+scrubber.addEventListener('input',()=>{ gotoFrame(parseInt(scrubber.value,10)); });
+scrubberMobile.addEventListener('input',()=>{ gotoFrame(parseInt(scrubberMobile.value,10)); });
+
+function gotoFrame(i){
+  if (!timeline.length) return;
+  i=Math.max(0,Math.min(timeline.length-1,i));
+  stopPlayback();
+  
+  // Sincronizar el valor del scrubber en ambos elementos (desktop/mobile)
+  [scrubber, scrubberMobile].forEach(s => s.value = i);
+  scrubLbl.textContent=`${i}/${timeline.length-1}`;
+  scrubLblMobile.textContent=`${i}/${timeline.length-1}`;
+  
+  const f=timeline[i];
+  f.players.forEach(p=>{
+    const el=[...playersLayer.children].find(e=>e.dataset.team===p.team && +e.dataset.number===p.number);
+    if (el){ el.style.left=p.x+'px'; el.style.top=p.y+'px'; }
+  });
+  if (f.ball){ placeBall(f.ball.x, f.ball.y); }
+  clearPlayerSelection(); // Limpiar selección al cambiar de frame
+}
+
+// Mapeo de eventos de control de reproducción
+btnPlay.addEventListener('click',playTimeline);
+btnPlayMobile.addEventListener('click',playTimeline);
+btnPause.addEventListener('click',()=>{ paused=true; });
+btnPauseMobile.addEventListener('click',()=>{ paused=true; });
+btnStop.addEventListener('click',stopPlayback);
+btnStopMobile.addEventListener('click',stopPlayback);
+btnClrTl.addEventListener('click',()=>{ timeline=[]; updateScrub(); stopPlayback(); });
+
+function toMap(f){ const m=new Map(); f.players.forEach(p=>m.set(p.team+'#'+p.number,p)); return m; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function animate(now){
+  if (!playing || paused) { rafId=requestAnimationFrame(animate); return; }
+  const u=Math.max(0,Math.min(1,(now-segStart)/segDur));
+  const A=toMap(fromF), B=toMap(toF);
+
+  [...playersLayer.children].forEach(el=>{
+    const key=el.dataset.team+'#'+el.dataset.number;
+    const pa=A.get(key)||{x:parseFloat(el.style.left),y:parseFloat(el.style.top)};
+    const pb=B.get(key)||pa;
+    el.style.left=lerp(pa.x,pb.x,u)+'px';
+    el.style.top =lerp(pa.y,pb.y,u)+'px';
+  });
+  placeBall(lerp(fromF.ball.x,toF.ball.x,u), lerp(fromF.ball.y,toF.ball.y,u));
+
+  if (u>=1){
+    playIdx++;
+    
+    // Actualizar labels de scrubbers (Desktop/Mobile)
+    scrubber.value = playIdx;
+    scrubberMobile.value = playIdx;
+    scrubLbl.textContent=`${playIdx}/${timeline.length-1}`;
+    scrubLblMobile.textContent=`${playIdx}/${timeline.length-1}`;
+
+    if (playIdx>=timeline.length-1){ playing=false; cancelAnimationFrame(rafId); rafId=null; return; }
+    fromF=timeline[playIdx]; toF=timeline[playIdx+1]; segStart=performance.now();
+  }
+  rafId=requestAnimationFrame(animate);
+}
+
+function playTimeline(){
+  if (timeline.length<2){ showStatus('Necesitás al menos 2 pasos grabados para animar.', 'var(--warn)'); return; }
+  segDur=Math.max(100, parseInt(speed.value||800,10));
+  if (!paused){
+    playIdx=parseInt(scrubber.value,10)||0;
+    if (playIdx>=timeline.length-1) playIdx=0;
+    fromF=timeline[playIdx]; toF=timeline[playIdx+1];
+    gotoFrame(playIdx);
+  }
+  paused=false; playing=true; segStart=performance.now();
+  if (!rafId) rafId=requestAnimationFrame(animate);
+}
+function stopPlayback(){ playing=false; paused=false; if (rafId){ cancelAnimationFrame(rafId); rafId=null; } }
+
+/* ---------- Export: canvas + WebM + MP4 (Copia de la original) ---------- */
+function drawPitch(ctx){
+  ctx.fillStyle='#137a46'; ctx.fillRect(0,0,WIDTH,HEIGHT);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=6; ctx.strokeRect(5,5,1190,690);
+  ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,0,80,700); ctx.fillRect(1120,0,80,700);
+  const v=(x,w=4,d=null)=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(x,0); ctx.lineTo(x,HEIGHT); ctx.lineWidth=w; ctx.stroke(); ctx.restore(); };
+  const h=(y,w=2,d=[4,8])=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(5,y); ctx.lineTo(1195,y); ctx.lineWidth=w; ctx.stroke(); ctx.restore(); };
+  v(80,4); v(1120,4); v(309,3); v(891,3); v(500,2,[8,10]); v(697,2,[8,10]); v(600,4);
+  h(50); h(150); h(550); h(650); v(130,2,[8,10]); v(1070,2,[8,10]);
+}
+function drawPlayer(ctx,p){
+  const r=20; 
+  
+  // Dibujar el círculo del jugador
+  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  const teamData = p.team === 'team-1' ? teamConfig.team1 : teamConfig.team2;
+  ctx.fillStyle = teamData.hexColor; 
+  ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
+  
+  // --- LÓGICA DE ROTACIÓN DE TEXTO CORREGIDA ---
+  ctx.save(); 
+  
+  // Si el canvas de exportación está en modo vertical (rotado 90 grados)
+  if (exportCanvas.width === 700 && exportCanvas.height === 1200) {
+      // Mover el origen de coordenadas al centro del jugador para la rotación
+      ctx.translate(p.x, p.y);
+      // Aplicar rotación inversa para mantener el texto horizontal
+      ctx.rotate(-90 * Math.PI / 180); 
+      // Mover el origen de vuelta para que el texto se dibuje centrado en el jugador
+      ctx.translate(-p.x, -p.y);
+  }
+  
+  // Dibujar el número (texto)
+  ctx.fillStyle='#fff'; 
+  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial'; 
+  ctx.textAlign='center'; 
+  ctx.textBaseline='middle'; 
+  ctx.fillText(p.number,p.x,p.y);
+  
+  // Restaurar el estado anterior del Canvas
+  ctx.restore();
+}
+function drawBallC(ctx,b){
+  ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(-15*Math.PI/180);
+  ctx.beginPath(); ctx.ellipse(0,0,25,15,0,0,Math.PI*2); ctx.fillStyle='#ffd400'; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
+  ctx.setLineDash([4,6]); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(0,0,15,9,0,0,Math.PI*2); ctx.stroke(); ctx.restore();
+}
+function drawStrokeC(ctx,s){
+  const pts=s.points.map(pt=>pt.split(',').map(Number)); if (pts.length<2) return;
+  ctx.save(); if (s.dashed) ctx.setLineDash([8,8]); ctx.lineWidth=s.width||5; ctx.strokeStyle=s.color||'#ffd400';
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.stroke(); ctx.restore();
+}
+function drawArrowC(ctx,a){
+  ctx.save(); if(a.dashed) ctx.setLineDash([8,8]); ctx.lineWidth=a.width||5; ctx.strokeStyle=a.color||'#ffd400';
+  ctx.beginPath(); ctx.moveTo(a.x1,a.y1); ctx.lineTo(a.x2,a.y2); ctx.stroke();
+  // Corregida lógica para dibujar la punta de la flecha con fill
+  ctx.save(); if(a.dashed) ctx.setLineDash([8,8]); ctx.fillStyle=a.color||'#ffd400';
+  const ang2=Math.atan2(a.y2-a.y1,a.x2-a.x1), head2=12+(a.width||5);
+  ctx.beginPath();
+  ctx.moveTo(a.x2,a.y2);
+  ctx.lineTo(a.x2-head2*Math.cos(ang2-Math.PI/6), a.y2-head2*Math.sin(ang2-Math.PI/6));
+  ctx.lineTo(a.x2-head2*Math.cos(ang2+Math.PI/6), a.y2-head2*Math.sin(ang2+Math.PI/6));
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+
+function currentPlayers(){ return [...playersLayer.children].map(el=>({team:el.dataset.team, number:+el.dataset.number, x:parseFloat(el.style.left), y:parseFloat(el.style.top)})); }
+function currentBall(){ return {...currentBallPos}; }
+
+function renderFrameToCanvas(playersArr, ballPos, includeOverlays=true, portraitExport=false){
+  if (portraitExport){
+    exportCanvas.width=700; exportCanvas.height=1200;
+    ctx.save();
+    ctx.clearRect(0,0,700,1200);
+    ctx.translate(700,0); ctx.rotate(Math.PI/2);
+    drawPitch(ctx);
+    playersArr.forEach(p=>drawPlayer(ctx,p));
+    drawBallC(ctx,ballPos);
+    if (includeOverlays){ strokes.forEach(s=>drawStrokeC(ctx,s)); arrows.forEach(a=>drawArrowC(ctx,a)); }
+    ctx.restore();
+  }else{
+    exportCanvas.width=1200; exportCanvas.height=700;
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    drawPitch(ctx);
+    playersArr.forEach(p=>drawPlayer(ctx,p));
+    drawBallC(ctx,ballPos);
+    if (includeOverlays){ strokes.forEach(s=>drawStrokeC(ctx,s)); arrows.forEach(a=>drawArrowC(ctx,a)); }
+  }
+}
+
+btnExportJpg.addEventListener('click',()=>{
+  const portraitExport = (layout.mode==='portrait');
+  renderFrameToCanvas(currentPlayers(), currentBall(), true, portraitExport);
+  const url=exportCanvas.toDataURL('image/jpeg',0.95);
+  const a=document.createElement('a');
+  a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.jpg' : '_horiz.jpg');
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+async function exportWebMBlob(){
+  if (timeline.length<2){ showStatus('Necesitas al menos 2 pasos para exportar un video.', 'var(--warn)'); throw new Error('No frames'); }
+  const fps=30, ms=1000/fps;
+  const portraitExport=(layout.mode==='portrait');
+  
+  // Mostrar mensaje de estado mientras se renderiza
+  showStatus('Renderizando animación a WebM... (puede tardar)', 'var(--accent2)');
+
+  const stream=exportCanvas.captureStream(fps);
+  const rec=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp9'});
+  const chunks=[]; rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  const done=new Promise(res=>rec.onstop=res);
+
+  const segMs=Math.max(100, parseInt(speed.value||800,10));
+  const steps=Math.max(1, Math.round(segMs/ms));
+
+  renderFrameToCanvas(timeline[0].players, timeline[0].ball, true, portraitExport);
+  await new Promise(r=>setTimeout(r,ms));
+
+  rec.start();
+  for (let i=0;i<timeline.length-1;i++){
+    const A=timeline[i], B=timeline[i+1];
+    const mapA=new Map(A.players.map(p=>[p.team+'#'+p.number,p]));
+    const mapB=new Map(B.players.map(p=>[p.team+'#'+p.number,p]));
+    for(let s=0;s<steps;s++){
+      const t=s/steps;
+      const playersInterp=[];
+      for(const [key,pa] of mapA.entries()){
+        const pb=mapB.get(key)||pa;
+        const [team, num]=key.split('#');
+        playersInterp.push({team, number:+num, x:lerp(pa.x,pb.x,t), y:lerp(pa.y,pb.y,t)});
+      }
+      const ballInterp={ x:lerp(A.ball.x,B.ball.x,t), y:lerp(A.ball.y,B.ball.y,t) };
+      renderFrameToCanvas(playersInterp, ballInterp, true, portraitExport);
+      await new Promise(r=>setTimeout(r,ms));
+    }
+  }
+  renderFrameToCanvas(timeline[timeline.length-1].players, timeline[timeline.length-1].ball, true, portraitExport);
+  await new Promise(r=>setTimeout(r,ms));
+
+  rec.stop(); await done;
+  showStatus('WebM listo para descargar.', 'var(--accent)');
+  return new Blob(chunks,{type:'video/webm'});
+}
+
+btnExportWebm.addEventListener('click', async ()=>{
+  try{
+    const blob=await exportWebMBlob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const portraitExport=(layout.mode==='portrait');
+    a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.webm' : '_horiz.webm');
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },500);
+  }catch(e){ console.error(e); }
+});
+
+/* MP4 con ffmpeg.wasm */
+let ffmpegInstance=null;
+async function ensureFFmpeg(){
+  if (ffmpegInstance) return ffmpegInstance;
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const ffmpeg=createFFmpeg({ log:false, corePath:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js' });
+  showStatus('Cargando conversor de MP4...', 'var(--warn)');
+  await ffmpeg.load();
+  ffmpegInstance={ffmpeg, fetchFile};
+  showStatus('Conversor MP4 listo.', 'var(--accent2)');
+  return ffmpegInstance;
+}
+btnExportMp4.addEventListener('click', async ()=>{
+  try{
+    const webm=await exportWebMBlob();
+    showStatus('Convirtiendo WebM a MP4...', 'var(--accent2)');
+    const { ffmpeg, fetchFile } = await ensureFFmpeg();
+    ffmpeg.FS('writeFile','in.webm',await fetchFile(webm));
+    await ffmpeg.run('-i','in.webm','-c:v','libx64','-preset','medium','-crf','23','-pix_fmt','yuv420p','out.mp4');
+    const data=ffmpeg.FS('readFile','out.mp4');
+    const blob=new Blob([data.buffer],{type:'video/mp4'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const portraitExport=(layout.mode==='portrait');
+    a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.mp4' : '_horiz.mp4');
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); try{ ffmpeg.FS('unlink','in.webm'); ffmpeg.FS('unlink','out.mp4'); }catch{} },500);
+    showStatus('MP4 listo para descargar.', 'var(--accent)');
+  }catch(e){
+    console.error(e); showStatus('No se pudo convertir a MP4 en este navegador. Usa el WebM o probá en desktop.', 'var(--red)');
+  }
+});
+
+/* ---------- Reset (Modificado: NO toca localStorage, solo estado de app) ---------- */
+btnReset.addEventListener('click',()=>{
+  if (!confirm('Reiniciar posiciones, dibujos y timeline? (No afecta las jugadas guardadas en Firestore)')) return;
+  // Reinicia solo el estado de la aplicación en memoria
+  
+  // Restablecer la configuración por defecto
+  teamConfig = { 
+      team1: { name: 'Equipo Azul', colorClass: 'team-1', hexColor: '#2f80ff' }, 
+      team2: { name: 'Equipo Rojo', colorClass: 'team-2', hexColor: '#ff5a6b' }  
+  };
+  // COMENTADO: Ya no se actualizan los campos de entrada de nombres.
+  // team1Name.value = teamConfig.team1.name;
+  // team2Name.value = teamConfig.team2.name;
+  
+  createPlayers(); 
+  placeBall(); 
+  arrows=[]; 
+  strokes=[]; 
+  timeline=[]; 
+  renderDraw(); 
+  updateScrub(); 
+  fitBoard();
+  playName.value = '';
+  playList.value = '';
+  showStatus('Tablero reiniciado.', 'var(--accent)');
+});
+
+/* -------------------------------------------------------------------------- */
+/* -------------------------- ASISTENTE TÁCTICO GEMINI ---------------------- */
+/* -------------------------------------------------------------------------- */
+
+// Helper para convertir coordenadas (0-1200, 0-700) a Grid (0-12, 0-7)
+function getGridPosition(x, y) {
+    const gridX = Math.floor(x / CELL_W);
+    const gridY = Math.floor(y / CELL_H);
+    return `${String.fromCharCode(65 + gridX)}${gridY + 1}`; // A1, B2, etc.
+}
+
+// Genera un prompt estructurado basado en la posición actual del campo
+function getTacticalPrompt() {
+    const currentPlayersData = snapshotPlayers();
+    const ball = snapshotBall();
+    const currentTeamConfig = teamConfig;
+    
+    let playerDescriptions = [];
+
+    currentPlayersData.forEach(p => {
+        const teamName = p.team === 'team-1' ? currentTeamConfig.team1.name : currentTeamConfig.team2.name;
+        const gridPos = getGridPosition(p.x, p.y);
+        playerDescriptions.push(`- ${teamName} (${p.number}): posición ${gridPos}`);
+    });
+
+    const ballPos = getGridPosition(ball.x, ball.y);
+    
+    return `
+        Analiza esta formación de rugby. El campo está dividido en una cuadrícula de 12 (largo, de A a L) por 7 (ancho, de 1 a 7). El equipo 1 es el atacante, moviéndose de izquierda a derecha. El campo tiene 1200x700px.
+
+        Configuración de equipos:
+        - Equipo 1 (Azul/Izquierda): ${currentTeamConfig.team1.name}
+        - Equipo 2 (Rojo/Derecha): ${currentTeamConfig.team2.name}
+
+        Posiciones actuales (formato: Equipo (Número): Posición en cuadrícula):
+        ${playerDescriptions.join('\n')}
+        
+        Balón: Posición ${ballPos}
+
+        Por favor, ofrece un análisis conciso:
+        1. Identifica el tipo de formación y la fase de juego (ej. Lineout defensivo, Mêlée en el centro).
+        2. Señala si hay superioridad numérica o espacios explotables.
+        3. Proporciona una recomendación táctica simple (ej. Abrir el juego hacia el ala, presionar al ruck).
+    `.trim();
+}
+
+// Llama a la API de Gemini
+async function callGeminiAPI(prompt) {
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+    const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: {
+            parts: [{ text: "Eres un entrenador de rugby experto. Proporciona un análisis táctico profesional, conciso y en español, utilizando la información de posición proporcionada. Usa emojis para la recomendación final." }]
+        },
+    };
+
+    let result = { text: "Error en la API. Intenta de nuevo.", sources: [] };
+    
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+
+        if (candidate && candidate.content?.parts?.[0]?.text) {
+          result.text = candidate.content.parts[0].text;
+        } else {
+          result.text = "No se pudo obtener una respuesta del asistente (formato inesperado).";
+        }
+    } catch (error) {
+        console.error("Gemini API Call Failed:", error);
+        result.text = `ERROR: Falló la conexión con la API de Gemini. (${error.message})`;
+    }
+    return result;
+}
+
+// Evento principal para el botón de análisis
+btnGeminiAnalyze.addEventListener('click', async () => {
+    btnGeminiAnalyze.disabled = true;
+    geminiAssistantOutput.innerHTML = '<div class="loader"></div> Analizando...';
+    
+    const prompt = getTacticalPrompt();
+    const result = await callGeminiAPI(prompt);
+
+    geminiAssistantOutput.innerHTML = result.text;
+    btnGeminiAnalyze.disabled = false;
+});
+
+
+/* ---------- Inicialización de la Lógica del Tablero ---------- */
+window.initBoardApp = function initBoardApp(){
+  // players & ball
+  createPlayers();
+  placeBall();
+  
+  // COMENTADO: Ya no se inicializan los campos de nombre de equipo.
+  // team1Name.value = teamConfig.team1.name;
+  // team2Name.value = teamConfig.team2.name;
+
+  // Si no hay timeline, crea un frame inicial
+  if (!timeline.length) { recordFrame(); }
+  updateScrub();
+
+  // Inicia la suscripción a Firestore para la lista de jugadas
+  refreshPlayList(); // Llama a la función unificada que maneja el fallback
+
+  // eventos de drag para el balón
+  enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
+  
+  // Nuevo: Habilitar la selección masiva con recuadro
+  enableSelectionBox();
+
+  // eventos UI
+  showGrid.checked=false; renderGrid();
+  snap.checked=false;
+  syncDrawingTools(); // Sincroniza los controles de dibujo al inicio
+  
+  // Render inicial y layout
+  renderDraw();
+  fitBoard(); 
+  // FIX: Se añade un pequeño timeout para forzar el cálculo correcto del layout
+  // cuando el DOM no está completamente renderizado en navegadores locales.
+  setTimeout(fitBoard, 50); 
+}
+</script>
+</body>
+</html>
