@@ -6,7 +6,6 @@
 <title>RugbyBoard Pro — Animación + Export (Firestore)</title>
 <script type="module">
 // --- Configuración e Inicialización de Firebase (OBLIGATORIO) ---
-// CORRECCIÓN: Eliminamos los corchetes en las URLs para evitar errores de resolución de módulos en entornos locales.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, deleteDoc, collection, query, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -14,33 +13,76 @@ import { getFirestore, doc, setDoc, deleteDoc, collection, query, onSnapshot, se
 // Habilitar logs de depuración
 setLogLevel('Debug');
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+// CONFIGURACIÓN PROPORCIONADA POR EL USUARIO:
+const firebaseConfig = {
+    apiKey: "AIzaSyDCIY11FyQxKZY3hwBGNWixtaK_SFZko6k",
+    authDomain: "rugbycoach-f0b23.firebaseapp.com",
+    projectId: "rugbycoach-f0b23",
+    storageBucket: "rugbycoach-f0b23.firebasestorage.app",
+    messagingSenderId: "536069158649",
+    appId: "1:536069158649:web:ead82ceea04f5d7ab39428",
+    measurementId: "G-XF5Q0WB0V0"
+};
+
+// Obtenemos el App ID directamente de la configuración
+const appId = firebaseConfig.appId || 'default-app-id';
+
+// Usamos el token de autenticación si está disponible en el entorno
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 let app, db = null, auth, userId = 'local_storage'; // db initialised to null
+let isAuthorized = false; // Estado de autorización
 
-// Ruta de la colección para guardar las jugadas privadas del usuario
-const getPlayCollectionRef = (uid) => collection(db, `artifacts/${appId}/users/${uid}/rugby_plays`);
+// IMPORTANTE: LISTA DE USUARIOS AUTORIZADOS
+// Solo los IDs de usuario presentes en esta lista tendrán permisos para GUARDAR, EDITAR y ELIMINAR jugadas.
+// Reemplaza los IDs de ejemplo con los IDs de usuario reales de tus entrenadores.
+const AUTHORIZED_USERS_IDS = [
+    'ejemplo_uid_entrenador1', 
+    'ejemplo_uid_entrenador2',
+    // ... agrega más IDs aquí
+];
+
+// Ruta de la colección para guardar las jugadas. 
+// Usamos una colección PUBLIC/GLOBAL para que todos puedan leer.
+const getPlayCollectionRef = () => collection(db, `artifacts/${appId}/public/data/rugby_plays`);
 
 // Función de inicialización asíncrona
 async function initFirebaseAndApp() {
     try {
+        // Usamos la configuración proporcionada por el usuario
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
-
+        
+        // --- INICIO: Manejo de Autenticación MÁS ROBUSTO (Fix para auth/configuration-not-found) ---
+        let signInSuccessful = false;
+        
         if (initialAuthToken) {
-            await signInWithCustomToken(auth, initialAuthToken);
-        } else {
-            await signInAnonymously(auth);
+            try {
+                // 1. Intenta iniciar sesión con el Custom Token (Entrenador)
+                await signInWithCustomToken(auth, initialAuthToken);
+                signInSuccessful = true;
+            } catch (authError) {
+                // Si falla (ej: token inválido o configuración de Auth no cargada), loguea el error y continúa.
+                console.warn("Fallo en signInWithCustomToken, intentando signInAnonymously:", authError.code);
+                // No lanzamos el error, permitimos el flujo a Anónimo.
+            }
         }
         
+        if (!signInSuccessful) {
+            // 2. Si no hubo token o el intento de token falló, usa Anónimo (Espectador)
+            await signInAnonymously(auth);
+        }
+        // --- FIN: Manejo de Autenticación MÁS ROBUSTO ---
+        
         userId = auth.currentUser?.uid || 'anonymous';
-        console.log("Firebase Auth ID:", userId);
+        isAuthorized = AUTHORIZED_USERS_IDS.includes(userId);
+        
+        console.log(`Firebase Auth ID: ${userId}. Autorizado: ${isAuthorized}`);
         
         // Reemplazamos las funciones de persistencia de localStorage por Firestore
         window.db = db;
+        window.auth = auth; // Exponemos auth para verificar el estado en refreshPlayList
         window.userId = userId;
         window.getPlayCollectionRef = getPlayCollectionRef;
         window.onSnapshot = onSnapshot;
@@ -48,13 +90,18 @@ async function initFirebaseAndApp() {
         window.setDoc = setDoc;
         window.deleteDoc = deleteDoc;
         window.query = query;
+        window.isAuthorized = isAuthorized; // Pasamos el estado de autorización
+
         
         // ÉXITO: Mostrar indicador de Cloud
-        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud)`;
+        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) ${isAuthorized ? '(Entrenador)' : '(Espectador)'}`;
 
     } catch (error) {
+        // Este catch solo se activaría si falla la inicialización de initializeApp o signInAnonymously
         console.error("Firebase initialization failed, switching to local storage:", error);
         db = null; // Confirmamos que db es nulo si falla
+        isAuthorized = true; // Si estamos en local, asumimos que estamos autorizados para guardar en localstorage
+        
         // FALLBACK: Mostrar indicador de Local
         document.getElementById('brand').innerHTML = `<span style="color:var(--warn);width:12px;height:12px;border-radius:50%;background:var(--warn);display:inline-block;margin-right:10px;"></span>RugbyBoard Pro (Local)`;
     } finally {
@@ -269,7 +316,7 @@ initFirebaseAndApp();
 
       <div class="toolbar">
         <button class="btn" id="btnReset">Reiniciar</button>
-        <button class="btn primary" id="btnSavePlay">Guardar jugada</button>
+        <button class="btn primary" id="btnSavePlay" disabled>Guardar jugada</button>
         <button class="btn" id="btnLoadPlay" disabled>Cargar</button>
         <button class="btn" id="btnExportJpg">JPG</button>
         <button class="btn" id="btnExportWebm">WebM</button>
@@ -303,8 +350,8 @@ initFirebaseAndApp();
               <button id="toolArrows" class="active">Flechas</button>
               <button id="toolPen">Lápiz</button>
             </div>
-            <button class="btn" id="btnUndo">Deshacer</button>
-            <button class="btn" id="btnClear">Borrar dibujos</button>
+            <button class="btn" id="btnUndo" disabled>Deshacer</button>
+            <button class="btn" id="btnClear" disabled>Borrar dibujos</button>
           </div>
           <div class="row">
             <div class="field">
@@ -330,9 +377,9 @@ initFirebaseAndApp();
             </div>
           </div>
           <div class="row">
-            <!--<div class="field">
+            <div class="field">
               <input type="checkbox" id="snap"> <label for="snap">Snap grilla</label>
-            </div>-->
+            </div>
             <div class="field">
               <input type="checkbox" id="showGrid"> <label for="showGrid">Ver grilla</label>
             </div>
@@ -361,7 +408,7 @@ initFirebaseAndApp();
           <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Gestión de Jugadas</h3>
           <div class="field grow">
             <label class="subtle">Nombre de Jugada (ID en DB)</label>
-            <input type="text" id="playName" placeholder="Ej: Lineout 8" class="grow"/>
+            <input type="text" id="playName" placeholder="Ej: Lineout 8" class="grow" disabled/>
           </div>
           <div class="row">
             <button class="btn" id="btnDuplicate" disabled>Duplicar (Local)</button>
@@ -376,9 +423,9 @@ initFirebaseAndApp();
         <div id="timelineSection" style="display:flex; flex-direction:column; gap:10px;">
           <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Control de Animación</h3>
           <div class="row">
-            <button class="btn grow" id="btnRecord">Grabar paso</button>
+            <button class="btn grow" id="btnRecord" disabled>Grabar paso</button>
             <div class="field">
-              <input type="checkbox" id="autoRec"> <label for="autoRec">Auto al soltar</label>
+              <input type="checkbox" id="autoRec" disabled> <label for="autoRec">Auto al soltar</label>
             </div>
           </div>
           <div class="row">
@@ -395,7 +442,7 @@ initFirebaseAndApp();
             <input type="range" id="scrubber" min="0" max="0" value="0" class="grow"/>
             <span id="scrubLbl" class="subtle">0/0</span>
           </div>
-          <button class="btn" id="btnClrTl">Limpiar animación</button>
+          <button class="btn" id="btnClrTl" disabled>Limpiar animación</button>
         </div>
       </aside>
 
@@ -460,8 +507,8 @@ initFirebaseAndApp();
               <option value="7">Grueso</option>
             </select>
           </div>
-          <button class="btn" id="btnUndoMobile">Deshacer</button>
-          <button class="btn" id="btnClearMobile">Borrar</button>
+          <button class="btn" id="btnUndoMobile" disabled>Deshacer</button>
+          <button class="btn" id="btnClearMobile" disabled>Borrar</button>
         </div>
         
         <!-- Controles de Jugada/Timeline para MÓVIL (ocultos en este dock en desktop) -->
@@ -470,7 +517,7 @@ initFirebaseAndApp();
           <div class="row" style="margin-top: 10px;">
             <div class="field grow">
               <label class="subtle">Jugada</label>
-              <input type="text" id="playNameMobile" placeholder="Nombre de jugada" class="grow"/>
+              <input type="text" id="playNameMobile" placeholder="Nombre de jugada" class="grow" disabled/>
             </div>
             <button class="btn" id="btnDuplicateMobile" disabled>Duplicar</button>
           </div>
@@ -484,7 +531,7 @@ initFirebaseAndApp();
 
           <div class="row" style="margin-top: 10px;">
             <span class="pill">Timeline</span>
-            <button class="btn" id="btnRecordMobile">Grabar</button>
+            <button class="btn" id="btnRecordMobile" disabled>Grabar</button>
             <button class="btn" id="btnPlayMobile">Play</button>
             <button class="btn" id="btnPauseMobile">Pause</button>
             <button class="btn" id="btnStopMobile">Stop</button>
@@ -610,12 +657,42 @@ let selectedPlayers = new Set(); // Conjunto para almacenar los elementos DOM de
 /* ---------- Funciones de Persistencia (CON FALLBACK LOCAL) ---------------- */
 /* -------------------------------------------------------------------------- */
 
+// --- NUEVA FUNCIÓN PARA HABILITAR/DESHABILITAR CONTROLES ---
+function setControlsDisabled(disabled) {
+    // Botones de Guardar/Eliminar (Top Bar y Side Panel)
+    [btnSavePlay, btnDelete, btnDeleteMobile].forEach(btn => btn.disabled = disabled);
+    
+    // Controles de Dibujo (Side Panel)
+    [toolArrows, toolPen, strokeColor, strokeWidth, dashed, snap, showGrid, btnUndo, btnClear].forEach(el => el.disabled = disabled);
+    
+    // Controles de Dibujo (Mobile Dock)
+    [toolArrowsMobile, toolPenMobile, strokeColorMobile, strokeWidthMobile, btnUndoMobile, btnClearMobile].forEach(el => el.disabled = disabled);
+
+    // Controles de Jugada/Grabación
+    [playName, playNameMobile, btnDuplicate, btnDuplicateMobile, btnRecord, btnRecordMobile, autoRec, btnClrTl].forEach(el => el.disabled = disabled);
+
+    // Jugadores y Balón (Gestión de Interacción)
+    // Deshabilitar drag and drop del tablero si no está autorizado
+    board.style.pointerEvents = disabled ? 'none' : 'auto';
+    playersLayer.style.pointerEvents = disabled ? 'none' : 'auto';
+    ball.style.pointerEvents = disabled ? 'none' : 'auto';
+
+    // Siempre permitir Cargar y Visualizar, incluso si están deshabilitados.
+    [btnLoadPlay, btnLoadPlayMobile, playList, playListMobile, btnPlay, btnPause, btnStop, scrubber, scrubberMobile].forEach(el => el.disabled = false);
+}
+
+
 function getPlayKey(name) {
     return 'rb-play-' + name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 }
 
 // 1. Guardar Estado Completo (Jugada)
 async function savePlay(name) {
+    if (window.db && !window.isAuthorized) {
+         showStatus('ERROR: No estás autorizado para guardar jugadas en la nube.', 'var(--red)');
+         return;
+    }
+
     const playId = name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase(); 
     const payload = { 
         name: name,
@@ -631,9 +708,10 @@ async function savePlay(name) {
 
     if (window.db) {
         // --- FIREBASE LOGIC (Cloud) ---
-        if (!window.db || !window.userId || !name) return console.error("DB no disponible o nombre inválido.");
+        if (!window.db || !name) return console.error("DB no disponible o nombre inválido.");
         try {
-            await window.setDoc(window.doc(window.getPlayCollectionRef(window.userId), playId), payload);
+            // Guardamos la jugada en la colección pública (solo autorizado)
+            await window.setDoc(window.doc(window.getPlayCollectionRef(), playId), payload);
             console.log(`Jugada '${name}' guardada con éxito en Firestore.`);
             showStatus('Jugada guardada en la nube!', 'var(--accent2)');
         } catch (e) {
@@ -658,11 +736,15 @@ async function savePlay(name) {
 // 2. Eliminar Jugada
 async function deletePlay(playId) {
     if (!playId) return;
+    if (window.db && !window.isAuthorized) {
+         showStatus('ERROR: No estás autorizado para eliminar jugadas.', 'var(--red)');
+         return;
+    }
 
     if (window.db) {
         // --- FIREBASE LOGIC (Cloud) ---
         try {
-            await window.deleteDoc(window.doc(window.getPlayCollectionRef(window.userId), playId));
+            await window.deleteDoc(window.doc(window.getPlayCollectionRef(), playId));
             console.log(`Jugada '${playId}' eliminada de Firestore.`);
         } catch (e) {
             console.error("Error al eliminar jugada:", e);
@@ -725,7 +807,8 @@ function loadPlay(playId) {
             el.dataset.team = p.team; 
             el.dataset.number = p.number;
             el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
-            enableDragPlayer(el, () => { if (autoRec.checked) recordFrame(); });
+            // IMPORTANTE: enableDragPlayer solo permite arrastrar si está autorizado (lógica dentro de la función)
+            enableDragPlayer(el, () => { if (autoRec.checked) recordFrame(); }); 
             playersLayer.appendChild(el);
         });
         applyUprightTransforms();
@@ -772,9 +855,7 @@ function populatePlayList(jugadas) {
         list.disabled = false;
     });
 
-    [btnLoadPlay, btnLoadPlayMobile, btnDelete, btnDeleteMobile].forEach(btn => {
-        if (btn) btn.disabled = false;
-    });
+    [btnLoadPlay, btnLoadPlayMobile, playList, playListMobile].forEach(el => el.disabled = false);
 }
 
 // 4. Suscripción/Refresco de la lista
@@ -783,9 +864,11 @@ function refreshPlayList() {
     if (window.db) {
         // --- FIREBASE LOGIC (Cloud) ---
         if (unsubscribePlays) unsubscribePlays();
-        if (!window.db || !window.userId) return;
+        // Verificamos que el usuario esté autenticado ANTES de intentar leer de Firestore
+        if (!window.db || !window.auth || !window.auth.currentUser) return; 
 
-        const q = window.query(window.getPlayCollectionRef(window.userId));
+        // La consulta es a la colección pública
+        const q = window.query(window.getPlayCollectionRef());
 
         unsubscribePlays = window.onSnapshot(q, (snapshot) => {
             const jugadas = [];
@@ -855,7 +938,7 @@ btnLoadPlay.addEventListener('click', () => {
 });
 
 playList.addEventListener('change', () => { 
-    const selectedOption = playList.options[playList.selectedIndex];
+    selectedOption = playList.options[playList.selectedIndex];
     playName.value = selectedOption.textContent;
     playNameMobile.value = selectedOption.textContent;
     playListMobile.value = selectedOption.value;
@@ -868,7 +951,7 @@ btnLoadPlayMobile.addEventListener('click', () => {
     loadPlay(playListMobile.value);
 });
 playListMobile.addEventListener('change', () => {
-    const selectedOption = playListMobile.options[playListMobile.selectedIndex];
+    selectedOption = playListMobile.options[playListMobile.selectedIndex];
     playName.value = selectedOption.textContent;
     playNameMobile.value = selectedOption.textContent;
     playList.value = selectedOption.value;
@@ -1131,6 +1214,9 @@ function enableDragPlayer(playerEl, onDrop){
   let lockBall=false, offX=0, offY=0;
   let isGroupMove = false; // Flag para movimiento de grupo
   let playerOffsets = []; // Almacena offsets iniciales para el grupo
+  
+  // Si el usuario no está autorizado, no debe poder arrastrar
+  if (window.db && !window.isAuthorized) return;
 
   const down=e=>{
     pid=e.pointerId; playerEl.setPointerCapture(pid); e.preventDefault();
@@ -1240,6 +1326,9 @@ function enableDragPlayer(playerEl, onDrop){
 /* Drag balón: con línea de pase (Modificado para usar placeBall) */
 function enableDragBall(onDrop){
   let pid=null, sx=0, sy=0, ox=0, oy=0, passer=null;
+  
+  // Si el usuario no está autorizado, no debe poder arrastrar
+  if (window.db && !window.isAuthorized) return;
 
   const down=e=>{
     pid=e.pointerId; ball.setPointerCapture(pid); e.preventDefault();
@@ -1288,6 +1377,9 @@ function enableDragBall(onDrop){
 /* ---------- Lógica de Selección Masiva (Nueva Función) ---------- */
 function enableSelectionBox() {
     let pid = null, startBoard = null, startClient = null;
+    
+    // Si el usuario no está autorizado, no debe poder usar el recuadro de selección.
+    if (window.db && !window.isAuthorized) return;
 
     const down = (e) => {
         // Solo activa el recuadro si no se está tocando un jugador o el balón,
@@ -1480,6 +1572,9 @@ board.addEventListener('pointerdown',e=>{
   if (e.target.closest('.player') || e.target.closest('#ball')) return;
   // Si estamos en modo selección masiva, no hacemos dibujos.
   if (tool === 'arrows' && e.shiftKey) return; 
+  
+  // Si no está autorizado, no puede dibujar.
+  if (window.db && !window.isAuthorized) return;
 
   try{board.setPointerCapture(e.pointerId);}catch{}
   let p=clientToBoard(e);
@@ -1505,6 +1600,10 @@ board.addEventListener('pointerdown',e=>{
 board.addEventListener('pointermove',e=>{
   if (tool==='arrows' && e.shiftKey) return; // Si estamos en modo selección, ignoramos movimiento de dibujo
   if (tool!=='pen' || !drawingStroke || !currentStroke) return;
+  
+  // Si no está autorizado, no puede dibujar.
+  if (window.db && !window.isAuthorized) return;
+  
   let p=clientToBoard(e);
   if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   const last=currentStroke.points[currentStroke.points.length-1];
@@ -1517,6 +1616,10 @@ board.addEventListener('pointermove',e=>{
 board.addEventListener('pointerup',e=>{
   if (tool==='arrows' && e.shiftKey) return; // Si estamos en modo selección, ignoramos up de dibujo
   try{board.releasePointerCapture(pid);}catch{}
+  
+  // Si no está autorizado, no puede dibujar.
+  if (window.db && !window.isAuthorized) return;
+  
   let p=clientToBoard(e);
   if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   
@@ -1542,17 +1645,25 @@ board.addEventListener('pointerup',e=>{
 
 // Mapeo de eventos de deshacer/limpiar para Mobile
 btnUndo.addEventListener('click',()=>{
+  if (window.db && !window.isAuthorized) { showStatus('No autorizado para deshacer.', 'var(--red)'); return; }
   if (tool==='arrows'){ arrows.pop(); }
   else { strokes.pop(); }
   renderDraw();
 });
 btnUndoMobile.addEventListener('click',()=>{
+  if (window.db && !window.isAuthorized) { showStatus('No autorizado para deshacer.', 'var(--red)'); return; }
   if (tool==='arrows'){ arrows.pop(); }
   else { strokes.pop(); }
   renderDraw();
 });
-btnClear.addEventListener('click',()=>{ arrows=[]; strokes=[]; renderDraw(); });
-btnClearMobile.addEventListener('click',()=>{ arrows=[]; strokes=[]; renderDraw(); });
+btnClear.addEventListener('click',()=>{ 
+  if (window.db && !window.isAuthorized) { showStatus('No autorizado para borrar dibujos.', 'var(--red)'); return; }
+  arrows=[]; strokes=[]; renderDraw(); 
+});
+btnClearMobile.addEventListener('click',()=>{ 
+  if (window.db && !window.isAuthorized) { showStatus('No autorizado para borrar dibujos.', 'var(--red)'); return; }
+  arrows=[]; strokes=[]; renderDraw(); 
+});
 
 
 /* ---------- Timeline (Copia de la original) ---------- */
@@ -1564,7 +1675,14 @@ function snapshotPlayers(){ return [...playersLayer.children].map(el=>({team:el.
 function snapshotBall(){ return {...currentBallPos}; }
 function snapshotFrame(){ return { players: snapshotPlayers(), ball: snapshotBall() }; }
 
-function recordFrame(){ timeline.push(snapshotFrame()); updateScrub(); }
+function recordFrame(){ 
+    if (window.db && !window.isAuthorized) {
+        showStatus('No autorizado para grabar pasos de animación.', 'var(--red)');
+        return;
+    }
+    timeline.push(snapshotFrame()); 
+    updateScrub(); 
+}
 // Mapeo de eventos de grabación
 btnRecord.addEventListener('click',recordFrame);
 btnRecordMobile.addEventListener('click',recordFrame);
@@ -1615,7 +1733,10 @@ btnPause.addEventListener('click',()=>{ paused=true; });
 btnPauseMobile.addEventListener('click',()=>{ paused=true; });
 btnStop.addEventListener('click',stopPlayback);
 btnStopMobile.addEventListener('click',stopPlayback);
-btnClrTl.addEventListener('click',()=>{ timeline=[]; updateScrub(); stopPlayback(); });
+btnClrTl.addEventListener('click',()=>{ 
+    if (window.db && !window.isAuthorized) { showStatus('No autorizado para limpiar la animación.', 'var(--red)'); return; }
+    timeline=[]; updateScrub(); stopPlayback(); 
+});
 
 function toMap(f){ const m=new Map(); f.players.forEach(p=>m.set(p.team+'#'+p.number,p)); return m; }
 function lerp(a,b,t){ return a+(b-a)*t; }
@@ -1996,6 +2117,9 @@ window.initBoardApp = function initBoardApp(){
 
   // Inicia la suscripción a Firestore para la lista de jugadas
   refreshPlayList(); // Llama a la función unificada que maneja el fallback
+  
+  // Aplica las restricciones de permisos
+  setControlsDisabled(!window.isAuthorized);
 
   // eventos de drag para el balón
   enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
