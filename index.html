@@ -35,12 +35,10 @@ let isAuthorized = false; // Estado de autorización
 let appInitialized = false; // Bandera para asegurar que initBoardApp solo se llame una vez
 
 // IMPORTANTE: LISTA DE USUARIOS AUTORIZADOS
-// Solo los IDs de usuario presentes en esta lista tendrán permisos para GUARDAR, EDITAR y ELIMINAR jugadas.
-// Reemplaza los IDs de ejemplo con los IDs de usuario reales de tus entrenadores.
+// SOLO TU UID DE ENTRENADOR ESTÁ AQUÍ.
 const AUTHORIZED_USERS_IDS = [
-    'ejemplo_uid_entrenador1', 
-    'ejemplo_uid_entrenador2',
-    // ... agrega más IDs aquí
+    'YZyCoUgkMsOtP7gmWe1qdlWmaug1', 
+    // ... agrega más IDs aquí si tienes más entrenadores
 ];
 
 // Ruta de la colección para guardar las jugadas. 
@@ -58,6 +56,7 @@ function handleAuthStateChange(user) {
         window.userId = userId;
 
         // Determinar si es un Entrenador (Authorized)
+        // Se considera Entrenador si el UID está en la lista Y NO es un usuario anónimo.
         const newIsAuthorized = AUTHORIZED_USERS_IDS.includes(userId) && !user.isAnonymous;
         window.isAuthorized = newIsAuthorized;
         isAuthorized = newIsAuthorized; // Sincroniza la variable local
@@ -77,15 +76,11 @@ function handleAuthStateChange(user) {
         document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) ${isAuthorized ? '(Entrenador)' : '(Espectador)'}`;
         
     } else {
-        // Usuario deslogueado. Intentamos volver al modo anónimo si es posible.
+        // Usuario deslogueado.
         userId = 'anonymous';
         window.userId = userId;
         window.isAuthorized = false;
         isAuthorized = false;
-        
-        // El onAuthStateChanged debería ser llamado después de signOut. 
-        // Si el usuario es nulo aquí, significa que se desconectó totalmente, 
-        // pero Firebase inmediatamente intenta volver al estado anónimo.
         
         // Si no hay usuario activo, aseguramos que los controles estén deshabilitados
         setControlsDisabled(true);
