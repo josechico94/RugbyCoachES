@@ -66,13 +66,7 @@ function handleAuthStateChange(user) {
 
         // 1. Ocultar el modal de login si está visible
         loginModal.style.display = 'none';
-
-        // 2. Si no estaba inicializada, inicializar la aplicación.
-        if (!appInitialized) {
-            appInitialized = true;
-            window.initBoardApp();
-        }
-
+        
         // 3. Actualizar el estado de los controles
         // Los controles de EDICIÓN se deshabilitan si NO es autorizado.
         setControlsDisabled(!isAuthorized);
@@ -105,12 +99,6 @@ function handleAuthStateChange(user) {
         window.isAuthorized = false;
         isAuthorized = false;
         
-        // Si no estaba inicializada, inicializar la aplicación como espectador.
-        if (!appInitialized) {
-            appInitialized = true;
-            window.initBoardApp();
-        }
-
         // Si no hay usuario activo, aseguramos que los controles estén deshabilitados
         // y habilitamos el botón de login
         setControlsDisabled(true); 
@@ -142,13 +130,18 @@ async function initFirebaseAndApp() {
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
         window.signOut = signOut;
         
-        // 2. Listener de cambio de estado de autenticación (CRÍTICO)
+        // 2. LÓGICA NO-BLOQUEANTE: Inicializar el Canvas inmediatamente
+        if (!appInitialized) {
+            appInitialized = true;
+            window.initBoardApp(); // LLAMADA NO-BLOQUEANTE
+        }
+        
+        // 3. Listener de cambio de estado de autenticación (ASÍNCRONO)
         onAuthStateChanged(auth, (user) => {
             if (user && !user.isAnonymous) { // Usuario por Email/Pass o Custom Token
                 handleAuthStateChange(user);
             } else if (!user) {
                 // Si NO hay usuario logueado, forzamos un intento de login anónimo.
-                // Esto es crucial para que el Espectador obtenga un UID para la regla de seguridad `request.auth != null`.
                 signInAnonymously(auth)
                     .then(credentials => handleAuthStateChange(credentials.user))
                     .catch(error => {
@@ -160,7 +153,7 @@ async function initFirebaseAndApp() {
             }
         });
         
-        // 3. Intentar iniciar sesión con Custom Token (si está disponible y no hay sesión aún)
+        // 4. Intentar iniciar sesión con Custom Token (si está disponible y no hay sesión aún)
         if (initialAuthToken) {
             try {
                 // Intentamos sin esperar, el onAuthStateChanged manejará el resultado
@@ -179,6 +172,8 @@ async function initFirebaseAndApp() {
         
         // Activa el modo local (Edición Completa) y la inicialización.
         document.getElementById('brand').innerHTML = `<span style="color:var(--warn);width:12px;height:12px;border-radius:50%;background:var(--warn);display:inline-block;margin-right:10px;"></span>RugbyBoard Pro (Local - Edición)`;
+        
+        // FIX: Llama a initBoardApp si falló Firebase, pero solo si aún no se inicializó.
         if (!appInitialized) {
             appInitialized = true;
             window.initBoardApp();
@@ -2459,8 +2454,17 @@ window.initBoardApp = function initBoardApp(){
   
   // Aplica las restricciones de permisos
   setControlsDisabled(!window.isAuthorized);
-  updateAuthButton(window.auth.currentUser.isAnonymous === false);
 
+  // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
+  if (window.auth) {
+      // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
+      const isUserLoggedIn = window.auth.currentUser ? !window.auth.currentUser.isAnonymous : false;
+      updateAuthButton(isUserLoggedIn);
+  } else {
+      // Si Firebase falló (modo local), ocultamos el botón de Auth (no hay cloud para iniciar sesión)
+      btnAuthAction.style.display = 'none';
+  }
+  
   // eventos de drag para el balón
   enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
   
