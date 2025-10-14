@@ -153,7 +153,8 @@ async function initFirebaseAndApp() {
                     .then(credentials => handleAuthStateChange(credentials.user))
                     .catch(error => {
                         console.error("Fallo al iniciar sesión anónimamente. No se pueden cargar jugadas:", error);
-                        // Fallo total de conexión, maneja el estado de desconexión.
+                        // FIX: Llama a handleAuthStateChange(null) en caso de fallo, 
+                        // para que la app se inicialice en modo desconectado.
                         handleAuthStateChange(null); 
                     });
             }
