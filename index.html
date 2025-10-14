@@ -37,7 +37,7 @@ let appInitialized = false; // Bandera para asegurar que initBoardApp solo se ll
 // IMPORTANTE: LISTA DE USUARIOS AUTORIZADOS
 // SOLO TU UID DE ENTRENADOR ESTÁ AQUÍ.
 const AUTHORIZED_USERS_IDS = [
-    'YZyCoUgkMsOtP7gmWe1qdlWmaug1', // UID Anterior
+    'YZyCoUgkMsOtP7gmWe1qdlWmaug1', // TU UID DE ENTRENADOR
     // ... el UID correcto se pegará aquí
 ];
 
@@ -58,7 +58,7 @@ function handleAuthStateChange(user) {
 
         // Determinar si es un Entrenador (Authorized)
         // Es Entrenador si el UID está en la lista Y NO es un usuario anónimo (si permitiéramos anónimos).
-        const newIsAuthorized = AUTHORIZED_USERS_IDS.includes(userId) && !user.isAnonymous;
+        const newIsAuthorized = AUTHORIZED_USERS_IDS.includes(userId);
         window.isAuthorized = newIsAuthorized;
         isAuthorized = newIsAuthorized; // Sincroniza la variable local
 
@@ -84,29 +84,27 @@ function handleAuthStateChange(user) {
         if (isAuthorized) {
             reInitializePlayerInteractions();
             // MOSTRAR UID AL INICIAR SESIÓN CON ÉXITO
-            if (!user.isAnonymous) {
-                showStatus(`Sesión Iniciada. ¡Listo para editar! Tu UID es: ${userId}`, 'var(--accent2)');
-            }
-        } else if (user && !user.isAnonymous) {
+            showStatus(`Sesión Iniciada. ¡Listo para editar! Tu UID es: ${userId}`, 'var(--accent2)');
+        } else {
              // Muestra el UID para que el usuario pueda copiarlo si es una cuenta no autorizada
              showStatus(`Sesión Iniciada como Espectador. Tu UID es: ${userId}. Contacta al administrador para editar.`, 'var(--warn)');
         }
         
     } else {
-        // No hay usuario activo (puede ser al inicio o después de logout)
+        // No hay usuario activo: MODO LECTOR (Desconectado/Espectador)
         userId = 'unauthenticated';
         window.userId = userId;
         window.isAuthorized = false;
         isAuthorized = false;
         
         // Si no hay usuario activo, aseguramos que los controles estén deshabilitados
-        // y habilitamos el botón de login
+        // pero las funciones de LECTURA (play, cargar) están disponibles.
         setControlsDisabled(true); 
         updateAuthButton(false);
-        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) (INICIA SESIÓN)`;
+        document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) (Modo Lector)`;
         
-        // Si el usuario cierra sesión, el botón "Iniciar Sesión" aparecerá,
-        // y los controles de carga (listas) ya estarán habilitados por setControlsDisabled.
+        // El modo Lector/Espectador solo requiere que la app cargue la lista de jugadas
+        refreshPlayList(); 
     }
 }
 
@@ -137,31 +135,16 @@ async function initFirebaseAndApp() {
         }
         
         // 3. Listener de cambio de estado de autenticación (ASÍNCRONO)
+        // NOTA CLAVE: YA NO INTENTAMOS signInAnonymously. El flujo de lectura (refreshPlayList)
+        // dependerá ahora de la regla de Firebase "allow read: true;" para usuarios no autenticados.
         onAuthStateChanged(auth, (user) => {
             if (user) { 
-                // Si ya hay un usuario (email/pass o anónimo) manejamos su estado
+                // Usuario autenticado (email/pass)
                 handleAuthStateChange(user);
             } else {
-                // Si NO hay usuario logueado, forzamos un intento de login anónimo.
-                signInAnonymously(auth)
-                    .then(credentials => handleAuthStateChange(credentials.user))
-                    .catch(error => {
-                        console.error("Fallo al iniciar sesión anónimamente. No se pueden cargar jugadas:", error);
-                        
-                        // FIX: Si la autenticación anónima falla (por admin-restricted), 
-                        // forzamos el modo de inicio de sesión inmediatamente.
-                        if (error.code === 'auth/admin-restricted-operation') {
-                             loginModal.style.display = 'grid';
-                             showStatus('ERROR: Habilita la Autenticación ANÓNIMA en tu Consola de Firebase O inicia sesión.', 'var(--red)');
-                        } else {
-                            // Mostrar error genérico si no es el error de configuración conocido
-                            showStatus(`ERROR DE AUTH: ${error.code}. Inicia sesión.`, 'var(--red)');
-                        }
-                        
-                        // Llama a handleAuthStateChange(null) en caso de fallo, 
-                        // para que la app se inicialice en modo desconectado.
-                        handleAuthStateChange(null); 
-                    });
+                // Si NO hay usuario, simplemente pasamos el estado nulo.
+                // Esto fuerza el modo Lector/Desconectado.
+                handleAuthStateChange(null);
             }
         });
         
@@ -488,17 +471,12 @@ initFirebaseAndApp();
               <select id="strokeColor" disabled>
                 <option value="#ffffff">Blanco</option>
                 <option value="#35d07f">Verde</option>
-                <option value="#2f80ff">Azul</option>
-                <option value="#ff5a6b">Rojo</option>
-                <option value="#ffd400" selected>Amarillo</option>
               </select>
             </div>
             <div class="field">
               <label>Grosor</label>
               <select id="strokeWidth" disabled>
                 <option value="3">Fino</option>
-                <option value="5" selected>Medio</option>
-                <option value="7">Grueso</option>
               </select>
             </div>
             <div class="field">
@@ -623,18 +601,12 @@ initFirebaseAndApp();
             <label>Color</label>
             <select id="strokeColorMobile" disabled>
               <option value="#ffffff">Blanco</option>
-              <option value="#35d07f">Verde</option>
-              <option value="#2f80ff">Azul</option>
-              <option value="#ff5a6b">Rojo</option>
-              <option value="#ffd400" selected>Amarillo</option>
             </select>
           </div>
           <div class="field">
             <label>Grosor</label>
             <select id="strokeWidthMobile" disabled>
               <option value="3">Fino</option>
-              <option value="5" selected>Medio</option>
-              <option value="7">Grueso</option>
             </select>
           </div>
           <button class="btn" id="btnUndoMobile" disabled>Deshacer</button>
@@ -1005,9 +977,11 @@ function refreshPlayList() {
         if (!window.db || !window.auth || !window.auth.currentUser) {
             // AJUSTE DE UI: Si no hay usuario, mostramos el mensaje correcto
             [playList, playListMobile].forEach(list => {
-                list.innerHTML = '<option value="">Inicia sesión para cargar jugadas</option>';
-                list.disabled = true; // Deshabilita la lista hasta que haya un UID
+                // Estado desconectado
+                list.innerHTML = '<option value="">Modo Lector: No Autenticado</option>';
+                list.disabled = true; // Deshabilita la lista hasta que haya un UID/conexión
             });
+            // Si no hay usuario, NO intentamos onSnapshot, y no hay error de permisos.
             return; 
         } 
         
