@@ -138,15 +138,27 @@ async function initFirebaseAndApp() {
         
         // 3. Listener de cambio de estado de autenticación (ASÍNCRONO)
         onAuthStateChanged(auth, (user) => {
-            if (user && !user.isAnonymous) { // Usuario por Email/Pass o Custom Token
+            if (user) { 
+                // Si ya hay un usuario (email/pass o anónimo) manejamos su estado
                 handleAuthStateChange(user);
-            } else if (!user) {
+            } else {
                 // Si NO hay usuario logueado, forzamos un intento de login anónimo.
                 signInAnonymously(auth)
                     .then(credentials => handleAuthStateChange(credentials.user))
                     .catch(error => {
                         console.error("Fallo al iniciar sesión anónimamente. No se pueden cargar jugadas:", error);
-                        // FIX: Llama a handleAuthStateChange(null) en caso de fallo, 
+                        
+                        // FIX: Si la autenticación anónima falla (por admin-restricted), 
+                        // forzamos el modo de inicio de sesión inmediatamente.
+                        if (error.code === 'auth/admin-restricted-operation') {
+                             loginModal.style.display = 'grid';
+                             showStatus('ERROR: Habilita la Autenticación ANÓNIMA en tu Consola de Firebase O inicia sesión.', 'var(--red)');
+                        } else {
+                            // Mostrar error genérico si no es el error de configuración conocido
+                            showStatus(`ERROR DE AUTH: ${error.code}. Inicia sesión.`, 'var(--red)');
+                        }
+                        
+                        // Llama a handleAuthStateChange(null) en caso de fallo, 
                         // para que la app se inicialice en modo desconectado.
                         handleAuthStateChange(null); 
                     });
@@ -2460,6 +2472,9 @@ window.initBoardApp = function initBoardApp(){
       // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
       const isUserLoggedIn = window.auth.currentUser ? !window.auth.currentUser.isAnonymous : false;
       updateAuthButton(isUserLoggedIn);
+      
+      // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
+      btnAuthAction.style.display = 'inline-block'; 
   } else {
       // Si Firebase falló (modo local), ocultamos el botón de Auth (no hay cloud para iniciar sesión)
       btnAuthAction.style.display = 'none';
