@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>RugbyBoard Pro — Animación + Export (Firestore)</title>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 <script type="module">
 // --- Configuración e Inicialización de Firebase (OBLIGATORIO) ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -853,6 +854,9 @@ function setControlsDisabled(disabled) {
     
     // Habilitar botón de Reset sólo para Entrenadores
     btnReset.disabled = !window.isAuthorized;
+    
+    // Habilitar campo de Nombre de Jugada (FIX: Esto estaba causando que no se pudiera escribir)
+    if (playName) playName.disabled = disabled;
 }
 
 
@@ -1144,8 +1148,13 @@ function updateAuthButton(isLoggedIn) {
     } else {
         btnAuthAction.textContent = 'Iniciar Sesión';
         btnAuthAction.classList.add('primary');
-        btnAuthAction.onclick = () => loginModal.style.display = 'grid';
+        btnAuthAction.onclick = () => openLoginModal();
     }
+}
+
+// NUEVA FUNCIÓN: Abre el modal de Login (y es usada por el botón de Auth)
+function openLoginModal() {
+    loginModal.style.display = 'grid';
 }
 
 // Evento: Iniciar Sesión
@@ -1168,6 +1177,9 @@ btnLogin.addEventListener('click', async () => {
     loginMessage.textContent = 'Iniciando sesión...';
 
     try {
+        // Agregamos una limpieza de sesión por seguridad para evitar conflictos con tokens residuales
+        if (window.auth.currentUser) await window.signOut(window.auth);
+        
         await window.signInWithEmailAndPassword(window.auth, email, password);
         // Si tiene éxito, el onAuthStateChanged se disparará, actualizando la UI.
         loginMessage.textContent = ''; // Limpiar mensaje de login
@@ -1176,8 +1188,8 @@ btnLogin.addEventListener('click', async () => {
         console.error("Login failed:", error.code, error.message);
         // Mostrar mensaje de error más legible
         let errorMessage = error.message;
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-            errorMessage = 'Credenciales incorrectas.';
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            errorMessage = 'Credenciales incorrectas. Verifica tu email y contraseña.';
         } else if (error.code === 'auth/invalid-email') {
             errorMessage = 'Formato de email inválido.';
         } else if (error.code === 'auth/operation-not-allowed') {
@@ -1245,6 +1257,20 @@ function showStatus(message, color='var(--accent)'){
 /* ------------------------------------------------------------------ */
 let layout={mode:'landscape', scale:1, tx:0, ty:0};
 let forcePortrait=false;
+
+// Lógica de apertura/cierre de menú de hamburguesa
+function openMobileMenu() {
+    desktopSidepanel.classList.add('open');
+    menuOverlay.classList.add('open');
+}
+function closeMobileMenu() {
+    desktopSidepanel.classList.remove('open');
+    menuOverlay.classList.remove('open');
+}
+if (btnMenuOpen) btnMenuOpen.addEventListener('click', openMobileMenu);
+if (btnCloseMenu) btnCloseMenu.addEventListener('click', closeMobileMenu);
+if (menuOverlay) menuOverlay.addEventListener('click', closeMobileMenu);
+
 
 function setSegActive(segBtn, otherBtn){
   if(segBtn) segBtn.classList.add('active');
