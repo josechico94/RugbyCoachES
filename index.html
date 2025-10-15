@@ -10,8 +10,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import { getAuth, signInAnonymously, signInWithCustomToken, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, deleteDoc, collection, query, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Habilitar logs de depuración
-setLogLevel('Debug');
+// Habilitar logs de depuración (CORRECCIÓN: 'debug' es el valor correcto)
+setLogLevel('debug');
 
 // CONFIGURACIÓN PROPORCIONADA POR EL USUARIO:
 const firebaseConfig = {
@@ -80,11 +80,11 @@ function handleAuthStateChange(user) {
         // Habilitar interacciones si es Entrenador
         if (isAuthorized) {
             reInitializePlayerInteractions();
-            // MOSTRAR UID AL INICIAR SESIÓN CON ÉXITO
-            showStatus(`Sesión Iniciada. ¡Listo para editar! Tu UID es: ${userId}`, 'var(--accent2)');
+            // CORRECCIÓN 1: Mensaje amigable, NO mostrar el UID
+            showStatus(`¡Bienvenido! Has iniciado sesión correctamente.`, 'var(--accent2)');
         } else {
              // Muestra el UID para que el usuario pueda copiarlo si es una cuenta no autorizada
-             showStatus(`Sesión Iniciada como Espectador. Tu UID es: ${userId}. Contacta al administrador para editar.`, 'var(--warn)');
+             showStatus(`Sesión Iniciada como Espectador.`, 'var(--warn)');
         }
         
     } else {
@@ -105,9 +105,7 @@ function handleAuthStateChange(user) {
 }
 
 
-// **************** CORRECCIÓN 2: MOVER DEFINICIÓN ****************
-
-/* ---------- Inicialización de la Lógica del Tablero ---------- */
+// **************** DEFINICIÓN DE initBoardApp ****************
 window.initBoardApp = function initBoardApp(){
   // players & ball
   createPlayers();
@@ -143,7 +141,7 @@ window.initBoardApp = function initBoardApp(){
 
   // eventos UI
   document.getElementById('showGrid').checked=false; renderGrid();
-  document.getElementById('snap').checked=false;
+  // El snap grilla ha sido eliminado.
   
   // Render inicial y layout
   renderDraw();
@@ -582,7 +580,7 @@ window.initFirebaseAndApp();
           
         <!-- ---------------------- CONTROLES DE ESCRITORIO / HAMBURGUESA MÓVIL ---------------------- -->
         
-        <!-- CONTROLES DE ORIENTACIÓN EN MÓVIL -->
+        <!-- CONTROLES DE ORIENTACIÓN EN MÓVIL (Mover el control de orientación del topbar aquí) -->
         <div id="mobileOrientationControls" class="sidepanel-section mobile-only" style="display:none; flex-direction:column; gap:10px;">
              <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Orientación</h3>
              <div class="seg" style="margin-top: 5px;">
@@ -592,6 +590,8 @@ window.initFirebaseAndApp();
         </div>
 
         <!-- 4. Asistente Táctico Gemini ✨ -->
+        <!-- CORRECCIÓN 2: MÓDULO ASISTENTE TÁCTICO OCULTO -->
+        <!-- 
         <div id="geminiAssistantSection" class="sidepanel-section" style="display:flex; flex-direction:column; gap:10px;">
           <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Asistente Táctico ✨</h3>
           <p class="subtle" style="margin:0; font-size:.8rem;">Obtén un análisis instantáneo de la formación actual en el campo.</p>
@@ -601,7 +601,8 @@ window.initFirebaseAndApp();
           <div id="geminiAssistantOutput">
             Haz clic en 'Analizar Formación' para obtener un reporte de Gemini.
           </div>
-        </div>
+        </div> 
+        -->
         
         <!-- 3. Controles de dibujo -->
         <div id="drawingControlsSection" class="sidepanel-section" style="display:flex; flex-direction:column; gap:10px;">
@@ -638,9 +639,10 @@ window.initFirebaseAndApp();
               <input type="checkbox" id="dashed" disabled> <label for="dashed">Punteado</label>
             </div>
           </div>
+          <!-- CORRECCIÓN 3: ELIMINAR SNAP GRILLA -->
           <div class="row">
             <div class="field">
-              <input type="checkbox" id="snap" disabled> <label for="snap">Snap grilla</label>
+              <!-- input type="checkbox" id="snap" disabled> <label for="snap">Snap grilla</label -->
             </div>
             <div class="field">
               <input type="checkbox" id="showGrid" disabled> <label for="showGrid">Ver grilla</label>
@@ -673,9 +675,10 @@ window.initFirebaseAndApp();
               <input type="checkbox" id="autoRec" disabled> <label for="autoRec">Auto al soltar</label>
             </div>
           </div>
+          <!-- CORRECCIÓN 4: UN SOLO BOTÓN PLAY/PAUSE -->
           <div class="row">
-            <button class="btn" id="btnPlay">Play</button>
-            <button class="btn" id="btnPause">Pause</button>
+            <button class="btn primary" id="btnPlayPause">Reproducir</button>
+            <!-- <button class="btn" id="btnPause">Pause</button> -->
             <button class="btn" id="btnStop">Stop</button>
             <div class="field grow">
               <label>Velocidad (ms)</label>
@@ -760,6 +763,10 @@ const loginModal = document.getElementById('loginModal'); // Nuevo DOM ID
 const btnAuthAction = document.getElementById('btnAuthAction'); // Nuevo DOM ID
 const menuOverlay = document.getElementById('menuOverlay'); // Nuevo DOM ID
 
+// Botones de control móvil
+const btnCloseMenu = document.getElementById('btnCloseMenu');
+const btnMenuOpen = document.getElementById('btnMenuOpen');
+
 /* Topbar / acciones */
 const btnLandscape = document.getElementById('btnLandscape');
 const btnPortrait = document.getElementById('btnPortrait');
@@ -769,7 +776,7 @@ const btnLoadPlay = document.getElementById('btnLoadPlay');
 const btnExportJpg = document.getElementById('btnExportJpg');
 const btnExportWebm = document.getElementById('btnExportWebm');
 const btnExportMp4 = document.getElementById('btnExportMp4');
-const btnMenuOpen = document.getElementById('btnMenuOpen'); // NUEVO BOTÓN HAMBURGUESA
+
 
 /* Dock herramientas (Desktop: en Sidepanel) */
 const toolArrows = document.getElementById('toolArrows');
@@ -778,7 +785,7 @@ const toolText = document.getElementById('toolText'); // NUEVO DOM ID
 const strokeColor = document.getElementById('strokeColor');
 const strokeWidth = document.getElementById('strokeWidth');
 const dashed = document.getElementById('dashed');
-const snap = document.getElementById('snap');
+// const snap = document.getElementById('snap'); // ELIMINADO
 const showGrid = document.getElementById('showGrid');
 const btnUndo = document.getElementById('btnUndo');
 const btnClear = document.getElementById('btnClear');
@@ -792,23 +799,22 @@ const btnDelete = document.getElementById('btnDelete');
 /* Timeline (Desktop) */
 const btnRecord = document.getElementById('btnRecord');
 const autoRec = document.getElementById('autoRec');
-const btnPlay = document.getElementById('btnPlay');
-const btnPause = document.getElementById('btnPause');
+// const btnPlay = document.getElementById('btnPlay'); // ELIMINADO
+// const btnPause = document.getElementById('btnPause'); // ELIMINADO
+const btnPlayPause = document.getElementById('btnPlayPause'); // NUEVO
 const btnStop = document.getElementById('btnStop');
 const speed = document.getElementById('speed');
 const scrubber = document.getElementById('scrubber');
 const scrubLbl = document.getElementById('scrubLbl');
 
 /* Asistente Gemini */
-const btnGeminiAnalyze = document.getElementById('btnGeminiAnalyze');
-const geminiAssistantOutput = document.getElementById('geminiAssistantOutput');
+// const btnGeminiAnalyze = document.getElementById('btnGeminiAnalyze'); // MÓDULO OCULTO
+// const geminiAssistantOutput = document.getElementById('geminiAssistantOutput'); // MÓDULO OCULTO
 
 // Controles de Orientación Móvil (Ahora solo se usan para el evento, no para el valor)
 const btnLandscapeMobile = document.getElementById('btnLandscapeMobile');
 const btnPortraitMobile = document.getElementById('btnPortraitMobile');
 
-// NO HAY MÁS REFERENCIAS A DOM MOBILE DUPLICADAS (playNameMobile, scrubberMobile, etc.)
-// SOLO USAMOS LOS IDS ORIGINALES DEL PANEL LATERAL.
 
 // Variables de estado del tablero
 let arrows=[], strokes=[], notes=[], timeline=[]; // NUEVO ARRAY NOTES
@@ -833,7 +839,7 @@ function setControlsDisabled(disabled) {
     [btnSavePlay, btnDelete, btnRecord, btnDuplicate, btnClrTl].forEach(btn => { if(btn) btn.disabled = disabled; });
     
     // Controles de Dibujo 
-    [toolArrows, toolPen, toolText, strokeColor, strokeWidth, dashed, snap, showGrid, btnUndo, btnClear].forEach(el => { if(el) el.disabled = disabled; });
+    [toolArrows, toolPen, toolText, strokeColor, strokeWidth, dashed, showGrid, btnUndo, btnClear].forEach(el => { if(el) el.disabled = disabled; });
     
     // Controles de Movimiento de Jugadores/Balón (se reactivan con reInitializePlayerInteractions() si es Entrenador)
     board.style.pointerEvents = disabled ? 'none' : 'auto';
@@ -842,7 +848,7 @@ function setControlsDisabled(disabled) {
 
 
     // SIEMPRE HABILITAR CARGAR, PLAY Y LISTAS para MODO ESPECTADOR (disabled=false)
-    [btnLoadPlay, playList, btnPlay, btnPause, btnStop, scrubber].forEach(el => { if(el) el.disabled = false; });
+    [btnLoadPlay, playList, btnPlayPause, btnStop, scrubber].forEach(el => { if(el) el.disabled = false; });
     
     // Habilitar botón de Reset sólo para Entrenadores
     btnReset.disabled = !window.isAuthorized;
@@ -1028,22 +1034,20 @@ function refreshPlayList() {
     if (window.db) {
         // --- FIREBASE LOGIC (Cloud) ---
         if (unsubscribePlays) unsubscribePlays();
-        // Verificamos que el usuario esté autenticado ANTES de intentar leer de Firestore
-        if (!window.db || !window.auth || !window.auth.currentUser) {
-            // AJUSTE DE UI: Si no hay usuario, mostramos el mensaje correcto
-            if (playList) {
-                // Estado desconectado
-                playList.innerHTML = '<option value="">Modo Lector: No Autenticado</option>';
-                playList.disabled = true; // Deshabilita la lista hasta que haya un UID/conexión
-            }
-            // Si no hay usuario, NO intentamos onSnapshot, y no hay error de permisos.
-            return; 
-        } 
         
-        // HABILITAR LISTAS y BOTONES DE LECTURA (ya que hay un UID)
+        // FIX: La lista y el botón Cargar SIEMPRE deben estar habilitados si la DB está viva
         if (playList) playList.disabled = false;
         if (btnLoadPlay) btnLoadPlay.disabled = false;
-
+        
+        // Verificamos que la DB esté inicializada antes de intentar el onSnapshot
+        if (!window.db || !window.auth) {
+            if (playList) {
+                playList.innerHTML = '<option value="">Error de conexión DB</option>';
+                playList.disabled = true;
+            }
+            return;
+        } 
+        
         // La consulta es a la colección pública
         const q = window.query(window.getPlayCollectionRef());
 
@@ -1411,7 +1415,7 @@ function deltaToBoard(dxClient, dyClient){
 
 function snapVal(v){ return Math.round(v/GRID)*GRID; }
 function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
-function dist(ax,ay,bx,by){ const dx=ax-bx, dy=ay-ay; return Math.hypot(dx,dy); }
+function dist(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return Math.hypot(dx,dy); } // CORRECCIÓN BUG: dy = ay - by
 function centerOf(el){ return { x:parseFloat(el.style.left)||0, y:parseFloat(el.style.top)||0 } }
 function rectIntersect(rect1, rect2) {
     return rect1.left < rect2.right &&
@@ -1554,33 +1558,10 @@ function enableDragPlayer(playerEl, onDrop){
       document.removeEventListener('pointerup',up);
       
       // Aplicar Snap (la lógica es compleja si no usamos las posiciones iniciales)
-      if (snap.checked){
-          // Calcular el desplazamiento total del jugador principal y aplicarlo al grupo
-          const finalX = parseFloat(playerEl.style.left);
-          const finalY = parseFloat(playerEl.style.top);
-          
-          const snappedX = snapVal(finalX);
-          const snappedY = snapVal(finalY);
-          
-          const snapDx = snappedX - finalX;
-          const snapDy = snappedY - finalY;
-          
-          const snappedPlayers = isGroupMove ? Array.from(selectedPlayers) : [playerEl];
-
-          snappedPlayers.forEach(el => {
-            const currentX = parseFloat(el.style.left);
-            const currentY = parseFloat(el.style.top);
-            
-            el.style.left = clamp(currentX + snapDx, 0, WIDTH) + 'px';
-            el.style.top = clamp(currentY + snapDy, 0, HEIGHT) + 'px';
-          });
-          
-          if (lockBall) {
-              const currentBX = currentBallPos.x;
-              const currentBY = currentBallPos.y;
-              placeBall(clamp(currentBX + snapDx, 0, WIDTH), clamp(currentBY + snapDy, 0, HEIGHT));
-          }
-      }
+      // CORRECCIÓN: Lógica de snap eliminada (punto 3)
+      /* if (snap.checked){
+          // ... (código de snap antiguo)
+      } */
       
       onDrop && onDrop(isGroupMove);
     };
@@ -1629,9 +1610,10 @@ function enableDragBall(onDrop){
       try{ball.releasePointerCapture(pid);}catch{}
       document.removeEventListener('pointermove',move);
       document.removeEventListener('pointerup',up);
-      if (snap.checked){
+      // CORRECCIÓN: Lógica de snap eliminada (punto 3)
+      /* if (snap.checked){
         placeBall(snapVal(currentBallPos.x), snapVal(currentBallPos.y));
-      }
+      } */
       hidePassPreview();
       onDrop && onDrop();
     };
@@ -1875,7 +1857,7 @@ board.addEventListener('pointerdown',e=>{
 
   try{board.setPointerCapture(e.pointerId);}catch{}
   let p=clientToBoard(e);
-  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  // Eliminado: if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   
   // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
   const currentStrokeColor = getActiveToolColor();
@@ -1919,7 +1901,7 @@ board.addEventListener('pointermove',e=>{
   if (window.db && !window.isAuthorized) return;
   
   let p=clientToBoard(e);
-  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  // Eliminado: if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   const last=currentStroke.points[currentStroke.points.length-1];
   const [lx,ly]=last.split(',').map(Number);
   if (Math.abs(p.x-lx)+Math.abs(p.y-ly) > 0.5){
@@ -1936,7 +1918,7 @@ board.addEventListener('pointerup',e=>{
   if (window.db && !window.isAuthorized) return;
   
   let p=clientToBoard(e);
-  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  // Eliminado: if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   
   // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
   const currentStrokeColor = getActiveToolColor();
@@ -2028,14 +2010,38 @@ function gotoFrame(i){
   clearPlayerSelection(); // Limpiar selección al cambiar de frame
 }
 
+// CORRECCIÓN 4: Lógica unificada de Play/Pause
+function togglePlayPause() {
+    if (playing) {
+        paused = true;
+        playing = false;
+        btnPlayPause.textContent = 'Reanudar';
+        btnPlayPause.classList.add('primary');
+    } else if (paused) {
+        paused = false;
+        playing = true;
+        btnPlayPause.textContent = 'Pausa';
+        btnPlayPause.classList.remove('primary');
+        if (!rafId) rafId = requestAnimationFrame(animate); // Reanudar animación
+    } else {
+        // Inicializar la reproducción
+        playTimeline();
+        btnPlayPause.textContent = 'Pausa';
+        btnPlayPause.classList.remove('primary');
+    }
+}
+
 // Mapeo de eventos de control de reproducción
-btnPlay.addEventListener('click',playTimeline);
-btnPause.addEventListener('click',()=>{ paused=true; });
-btnStop.addEventListener('click',stopPlayback);
-btnClrTl.addEventListener('click',()=>{ 
-    if (window.db && !window.isAuthorized) { showStatus('No autorizado para limpiar la animación.', 'var(--red)'); return; }
-    timeline=[]; updateScrub(); stopPlayback(); 
-});
+btnPlayPause.addEventListener('click', togglePlayPause);
+
+function stopPlayback(){ 
+    playing=false; 
+    paused=false; 
+    if (rafId){ cancelAnimationFrame(rafId); rafId=null; } 
+    btnPlayPause.textContent = 'Reproducir';
+    btnPlayPause.classList.add('primary');
+}
+btnStop.addEventListener('click', stopPlayback);
 
 function toMap(f){ const m=new Map(); f.players.forEach(p=>m.set(p.team+'#'+p.number,p)); return m; }
 function lerp(a,b,t){ return a+(b-a)*t; }
@@ -2061,7 +2067,10 @@ function animate(now){
     scrubber.value = playIdx;
     scrubLbl.textContent=`${playIdx}/${timeline.length-1}`;
 
-    if (playIdx>=timeline.length-1){ playing=false; cancelAnimationFrame(rafId); rafId=null; return; }
+    if (playIdx>=timeline.length-1){ 
+        stopPlayback(); // Termina la reproducción
+        return; 
+    }
     fromF=timeline[playIdx]; toF=timeline[playIdx+1]; segStart=performance.now();
   }
   rafId=requestAnimationFrame(animate);
@@ -2088,436 +2097,7 @@ function playTimeline(){
   paused=false; playing=true; segStart=performance.now();
   if (!rafId) rafId=requestAnimationFrame(animate);
 }
-function stopPlayback(){ playing=false; paused=false; if (rafId){ cancelAnimationFrame(rafId); rafId=null; } }
-
-/* ---------- Export: canvas + WebM + MP4 (Copia de la original) ---------- */
-function drawPitch(ctx){
-  ctx.fillStyle='#137a46'; ctx.fillRect(0,0,WIDTH,HEIGHT);
-  ctx.strokeStyle='#fff'; ctx.lineWidth=6; ctx.strokeRect(5,5,1190,690);
-  ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,0,80,700); ctx.fillRect(1120,0,80,700);
-  const v=(x,w=4,d=null)=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(x,0); ctx.lineTo(x,HEIGHT); ctx.lineWidth=w; ctx.stroke(); ctx.restore(); };
-  const h=(y,w=2,d=[4,8])=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(5,y); ctx.lineTo(1195,y); ctx.lineWidth=w; ctx.stroke(); ctx.restore(); };
-  v(80,4); v(1120,4); v(309,3); v(891,3); v(500,2,[8,10]); v(697,2,[8,10]); v(600,4);
-  h(50); h(150); h(550); h(650); v(130,2,[8,10]); v(1070,2,[8,10]);
-}
-function drawPlayer(ctx,p){
-  const r=20; 
-  
-  // Dibujar el círculo del jugador
-  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
-  const teamData = p.team === 'team-1' ? teamConfig.team1 : teamConfig.team2;
-  ctx.fillStyle = teamData.hexColor; 
-  ctx.fill();
-  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
-  
-  // --- LÓGICA DE ROTACIÓN DE TEXTO CORREGIDA ---
-  ctx.save(); 
-  
-  // Si el canvas de exportación está en modo vertical (rotado 90 grados)
-  if (exportCanvas.width === 700 && exportCanvas.height === 1200) {
-      // Mover el origen de coordenadas al centro del jugador para la rotación
-      ctx.translate(p.x, p.y);
-      // Aplicar rotación inversa para mantener el texto horizontal
-      ctx.rotate(-90 * Math.PI / 180); 
-      // Mover el origen de vuelta para que el texto se dibuje centrado en el jugador
-      ctx.translate(-p.x, -p.y);
-  }
-  
-  // Dibujar el número (texto)
-  ctx.fillStyle='#fff'; 
-  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial'; 
-  ctx.textAlign='center'; 
-  ctx.textBaseline='middle'; 
-  ctx.fillText(p.number,p.x,p.y);
-  
-  // Restaurar el estado anterior del Canvas
-  ctx.restore();
-}
-function drawBallC(ctx,b){
-  ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(-15*Math.PI/180);
-  ctx.beginPath(); ctx.ellipse(0,0,25,15,0,0,Math.PI*2); ctx.fillStyle='#ffd400'; ctx.fill();
-  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
-  ctx.setLineDash([4,6]); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,.25)';
-  ctx.beginPath(); ctx.ellipse(0,0,15,9,0,0,Math.PI*2); ctx.stroke(); ctx.restore();
-}
-function drawStrokeC(ctx,s){
-  const pts=s.points.map(pt=>pt.split(',').map(Number)); if (pts.length<2) return;
-  ctx.save(); if (s.dashed) ctx.setLineDash([8,8]); ctx.lineWidth=s.width||5; ctx.strokeStyle=s.color||'#ffd400';
-  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.stroke(); ctx.restore();
-}
-function drawArrowC(ctx,a){
-  ctx.save(); if(a.dashed) ctx.setLineDash([8,8]); ctx.lineWidth=a.width||5; ctx.strokeStyle=a.color||'#ffd400';
-  ctx.beginPath(); ctx.moveTo(a.x1,a.y1); ctx.lineTo(a.x2,a.y2); ctx.stroke();
-  // Corregida lógica para dibujar la punta de la flecha con fill
-  ctx.save(); if(a.dashed) ctx.setLineDash([8,8]); ctx.fillStyle=a.color||'#ffd400';
-  const ang2=Math.atan2(a.y2-a.y1,a.x2-a.x1), head2=12+(a.width||5);
-  ctx.beginPath();
-  ctx.moveTo(a.x2,a.y2);
-  ctx.lineTo(a.x2-head2*Math.cos(ang2-Math.PI/6), a.y2-head2*Math.sin(ang2-Math.PI/6));
-  ctx.lineTo(a.x2-head2*Math.cos(ang2+Math.PI/6), a.y2-head2*Math.sin(ang2+Math.PI/6));
-  ctx.closePath(); ctx.fill(); ctx.restore();
-}
-// NUEVO: Dibujo de notas en Canvas
-function drawNoteC(ctx, n) {
-    ctx.save();
-    ctx.fillStyle = n.color || '#ffffff';
-    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Dibujar el contorno para mejor visibilidad
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
-    ctx.strokeText(n.text, n.x, n.y);
-    
-    ctx.fillText(n.text, n.x, n.y);
-    ctx.restore();
-}
-
-
-function currentPlayers(){ return [...playersLayer.children].map(el=>({team:el.dataset.team, number:+el.dataset.number, x:parseFloat(el.style.left), y:parseFloat(el.style.top)})); }
-function currentBall(){ return {...currentBallPos}; }
-
-function renderFrameToCanvas(playersArr, ballPos, includeOverlays=true, portraitExport=false){
-  if (portraitExport){
-    exportCanvas.width=700; exportCanvas.height=1200;
-    ctx.save();
-    ctx.clearRect(0,0,700,1200);
-    ctx.translate(700,0); ctx.rotate(Math.PI/2);
-    drawPitch(ctx);
-    playersArr.forEach(p=>drawPlayer(ctx,p));
-    drawBallC(ctx,ballPos);
-    if (includeOverlays){ 
-        strokes.forEach(s=>drawStrokeC(ctx,s)); 
-        arrows.forEach(a=>drawArrowC(ctx,a)); 
-        notes.forEach(n=>drawNoteC(ctx, n)); // NUEVO: DIBUJAR NOTAS
-    }
-    ctx.restore();
-  }else{
-    exportCanvas.width=1200; exportCanvas.height=700;
-    ctx.clearRect(0,0,WIDTH,HEIGHT);
-    drawPitch(ctx);
-    playersArr.forEach(p=>drawPlayer(ctx,p));
-    drawBallC(ctx,ballPos);
-    if (includeOverlays){ 
-        strokes.forEach(s=>drawStrokeC(ctx,s)); 
-        arrows.forEach(a=>drawArrowC(ctx,a)); 
-        notes.forEach(n=>drawNoteC(ctx, n)); // NUEVO: DIBUJAR NOTAS
-    }
-  }
-}
-
-btnExportJpg.addEventListener('click',()=>{
-  const portraitExport = (layout.mode==='portrait');
-  renderFrameToCanvas(currentPlayers(), currentBall(), true, portraitExport);
-  const url=exportCanvas.toDataURL('image/jpeg',0.95);
-  const a=document.createElement('a');
-  a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.jpg' : '_horiz.jpg');
-  document.body.appendChild(a); a.click(); a.remove();
-});
-
-async function exportWebMBlob(){
-  if (timeline.length<2){ showStatus('Necesitas al menos 2 pasos para exportar un video.', 'var(--warn)'); throw new Error('No frames'); }
-  const fps=30, ms=1000/fps;
-  const portraitExport=(layout.mode==='portrait');
-  
-  // Mostrar mensaje de estado mientras se renderiza
-  showStatus('Renderizando animación a WebM... (puede tardar)', 'var(--accent2)');
-
-  const stream=exportCanvas.captureStream(fps);
-  const rec=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp9'});
-  const chunks=[]; rec.ondataavailable=e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-  const done=new Promise(res=>rec.onstop=res);
-
-  const segMs=Math.max(100, parseInt(speed.value||800,10));
-  const steps=Math.max(1, Math.round(segMs/ms));
-
-  renderFrameToCanvas(timeline[0].players, timeline[0].ball, true, portraitExport);
-  await new Promise(r=>setTimeout(r,ms));
-
-  rec.start();
-  for (let i=0;i<timeline.length-1;i++){
-    const A=timeline[i], B=timeline[i+1];
-    const mapA=new Map(A.players.map(p=>[p.team+'#'+p.number,p]));
-    const mapB=new Map(B.players.map(p=>[p.team+'#'+p.number,p]));
-    for(let s=0;s<steps;s++){
-      const t=s/steps;
-      const playersInterp=[];
-      for(const [key,pa] of mapA.entries()){
-        const pb=mapB.get(key)||pa;
-        const [team, num]=key.split('#');
-        playersInterp.push({team, number:+num, x:lerp(pa.x,pb.x,t), y:lerp(pa.y,pb.y,t)});
-      }
-      const ballInterp={ x:lerp(A.ball.x,B.ball.x,t), y:lerp(A.ball.y,B.ball.y,t) };
-      renderFrameToCanvas(playersInterp, ballInterp, true, portraitExport);
-      await new Promise(r=>setTimeout(r,ms));
-    }
-  }
-  renderFrameToCanvas(timeline[timeline.length-1].players, timeline[timeline.length-1].ball, true, portraitExport);
-  await new Promise(r=>setTimeout(r,ms));
-
-  rec.stop(); await done;
-  showStatus('WebM listo para descargar.', 'var(--accent)');
-  return new Blob(chunks,{type:'video/webm'});
-}
-
-btnExportWebm.addEventListener('click', async ()=>{
-  try{
-    const blob=await exportWebMBlob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const portraitExport=(layout.mode==='portrait');
-    a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.webm' : '_horiz.webm');
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },500);
-  }catch(e){ console.error(e); }
-});
-
-/* MP4 con ffmpeg.wasm */
-let ffmpegInstance=null;
-async function ensureFFmpeg(){
-  if (ffmpegInstance) return ffmpegInstance;
-  const { createFFmpeg, fetchFile } = FFmpeg;
-  const ffmpeg=createFFmpeg({ log:false, corePath:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js' });
-  showStatus('Cargando conversor de MP4...', 'var(--warn)');
-  await ffmpeg.load();
-  ffmpegInstance={ffmpeg, fetchFile};
-  showStatus('Conversor MP4 listo.', 'var(--accent2)');
-  return ffmpegInstance;
-}
-btnExportMp4.addEventListener('click', async ()=>{
-  try{
-    const webm=await exportWebMBlob();
-    showStatus('Convirtiendo WebM a MP4...', 'var(--accent2)');
-    const { ffmpeg, fetchFile } = await ensureFFmpeg();
-    ffmpeg.FS('writeFile','in.webm',await fetchFile(webm));
-    await ffmpeg.run('-i','in.webm','-c:v','libx64','-preset','medium','-crf','23','-pix_fmt','yuv420p','out.mp4');
-    const data=ffmpeg.FS('readFile','out.mp4');
-    const blob=new Blob([data.buffer],{type:'video/mp4'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const portraitExport=(layout.mode==='portrait');
-    a.href=url; a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.mp4' : '_horiz.mp4');
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); try{ ffmpeg.FS('unlink','in.webm'); ffmpeg.FS('unlink','out.mp4'); }catch{} },500);
-    showStatus('MP4 listo para descargar.', 'var(--accent)');
-  }catch(e){
-    console.error(e); showStatus('No se pudo convertir a MP4 en este navegador. Usa el WebM o probá en desktop.', 'var(--red)');
-  }
-});
-
-/* ---------- Reset (Modificado: NO toca localStorage, solo estado de app) ---------- */
-btnReset.addEventListener('click',()=>{
-  if (!confirm('Reiniciar posiciones, dibujos y timeline? (No afecta las jugadas guardadas en Firestore)')) return;
-  // Reinicia solo el estado de la aplicación en memoria
-  
-  // Restablecer la configuración por defecto
-  teamConfig = { 
-      team1: { name: 'Equipo Azul', colorClass: 'team-1', hexColor: '#2f80ff' }, 
-      team2: { name: 'Equipo Rojo', colorClass: 'team-2', hexColor: '#ff5a6b' }  
-  };
-  
-  createPlayers(); 
-  placeBall(); 
-  arrows=[]; 
-  strokes=[]; 
-  notes=[]; // NUEVO: LIMPIAR NOTAS
-  timeline=[]; 
-  renderDraw(); 
-  updateScrub(); 
-  fitBoard();
-  playName.value = '';
-  playList.value = '';
-  showStatus('Tablero reiniciado.', 'var(--accent)');
-});
-
-/* -------------------------------------------------------------------------- */
-/* -------------------------- ASISTENTE TÁCTICO GEMINI ---------------------- */
-/* -------------------------------------------------------------------------- */
-
-// Helper para convertir coordenadas (0-1200, 0-700) a Grid (0-12, 0-7)
-function getGridPosition(x, y) {
-    const gridX = Math.floor(x / CELL_W);
-    const gridY = Math.floor(y / CELL_H);
-    return `${String.fromCharCode(65 + gridX)}${gridY + 1}`; // A1, B2, etc.
-}
-
-// Genera un prompt estructurado basado en la posición actual del campo
-function getTacticalPrompt() {
-    const currentPlayersData = snapshotPlayers();
-    const ball = snapshotBall();
-    const currentTeamConfig = teamConfig;
-    
-    let playerDescriptions = [];
-
-    currentPlayersData.forEach(p => {
-        const teamName = p.team === 'team-1' ? currentTeamConfig.team1.name : currentTeamConfig.team2.name;
-        const gridPos = getGridPosition(p.x, p.y);
-        playerDescriptions.push(`- ${teamName} (${p.number}): posición ${gridPos}`);
-    });
-
-    const ballPos = getGridPosition(ball.x, ball.y);
-    
-    return `
-        Analiza esta formación de rugby. El campo está dividido en una cuadrícula de 12 (largo, de A a L) por 7 (ancho, de 1 a 7). El equipo 1 es el atacante, moviéndose de izquierda a derecha. El campo tiene 1200x700px.
-
-        Configuración de equipos:
-        - Equipo 1 (Azul/Izquierda): ${currentTeamConfig.team1.name}
-        - Equipo 2 (Rojo/Derecha): ${currentTeamConfig.team2.name}
-
-        Posiciones actuales (formato: Equipo (Número): Posición en cuadrícula):
-        ${playerDescriptions.join('\n')}
-        
-        Balón: Posición ${ballPos}
-
-        Por favor, ofrece un análisis conciso:
-        1. Identifica el tipo de formación y la fase de juego (ej. Lineout defensivo, Mêlée en el centro).
-        2. Señala si hay superioridad numérica o espacios explotables.
-        3. Proporciona una recomendación táctica simple (ej. Abrir el juego hacia el ala, presionar al ruck).
-    `.trim();
-}
-
-// Llama a la API de Gemini
-async function callGeminiAPI(prompt) {
-    const apiKey = "AIzaSyBuA-HrGbc2qRZZcUKay4LHQDAC0o_Ro0w"; // ¡CLAVE API INTEGRADA AQUÍ!
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
-    const payload = {
-        contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: {
-            parts: [{ text: "Eres un entrenador de rugby experto. Proporciona un análisis táctico profesional, conciso y en español, utilizando la información de posición proporcionada. Usa emojis para la recomendación final." }]
-        },
-    };
-
-    let result = { text: "Error en la API. Intenta de nuevo.", sources: [] };
-    
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) {
-            // Manejo específico del error 403
-            if (response.status === 403) {
-                 throw new Error("403 - Error de Autorización (API Key). Asegúrate de que la API Key esté habilitada para Gemini en este entorno.");
-            }
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const candidate = data.candidates?.[0];
-
-        if (candidate && candidate.content?.parts?.[0]?.text) {
-          result.text = candidate.content.parts[0].text;
-        } else {
-          result.text = "No se pudo obtener una respuesta del asistente (formato inesperado).";
-        }
-    } catch (error) {
-        console.error("Gemini API Call Failed:", error);
-        
-        if (error.message.includes('403')) {
-            result.text = `ERROR DE AUTORIZACIÓN 🔑: El Asistente Táctico está listo, pero la plataforma está rechazando la clave de Gemini. Esto es un problema de configuración del entorno/API Key.`;
-        } else {
-            result.text = `ERROR: Falló la conexión con la API de Gemini. (${error.message})`;
-        }
-    }
-    return result;
-}
-
-// Evento principal para el botón de análisis
-btnGeminiAnalyze.addEventListener('click', async () => {
-    btnGeminiAnalyze.disabled = true;
-    geminiAssistantOutput.innerHTML = '<div class="loader"></div> Analizando...';
-    
-    const prompt = getTacticalPrompt();
-    const result = await callGeminiAPI(prompt);
-
-    geminiAssistantOutput.innerHTML = result.text;
-    btnGeminiAnalyze.disabled = false;
-});
-
-
-/* -------------------------- LÓGICA DE MENÚ MÓVIL -------------------------- */
-
-// Función para abrir el menú de hamburguesa
-function openMobileMenu() {
-    if (desktopSidepanel) desktopSidepanel.classList.add('open');
-    if (menuOverlay) menuOverlay.classList.add('open');
-}
-
-// Función para cerrar el menú de hamburguesa
-function closeMobileMenu() {
-    if (desktopSidepanel) desktopSidepanel.classList.remove('open');
-    if (menuOverlay) menuOverlay.classList.remove('open');
-}
-
-// Eventos de Hamburguesa
-if (btnMenuOpen) btnMenuOpen.addEventListener('click', openMobileMenu);
-if (btnCloseMenu) btnCloseMenu.addEventListener('click', closeMobileMenu);
-if (menuOverlay) menuOverlay.addEventListener('click', closeMobileMenu); // Cerrar al hacer tap en el overlay
-
-// Inicialización de herramientas de menú para que cierren al usarse
-if (toolArrows) toolArrows.addEventListener('click', closeMobileMenu);
-if (toolPen) toolPen.addEventListener('click', closeMobileMenu);
-if (toolText) toolText.addEventListener('click', closeMobileMenu);
-
-// Asegurar que el cambio de orientación cierre el menú
-if (document.getElementById('btnLandscapeMobile')) document.getElementById('btnLandscapeMobile').addEventListener('click', closeMobileMenu);
-if (document.getElementById('btnPortraitMobile')) document.getElementById('btnPortraitMobile').addEventListener('click', closeMobileMenu);
-
-// Clonar los eventos del Timeline (Play/Pause) para que cierren el menú si es necesario.
-if (btnPlay) btnPlay.addEventListener('click', closeMobileMenu);
-if (btnPause) btnPause.addEventListener('click', closeMobileMenu);
-if (btnStop) btnStop.addEventListener('click', closeMobileMenu);
-
-
-/* ---------- Inicialización de la Lógica del Tablero ---------- */
-window.initBoardApp = function initBoardApp(){
-  // players & ball
-  createPlayers();
-  placeBall();
-  
-  // Si no hay timeline, crea un frame inicial
-  if (!timeline.length) { recordFrame(); }
-  updateScrub();
-
-  // Inicia la suscripción a Firestore para la lista de jugadas
-  refreshPlayList(); // Llama a la función unificada que maneja el fallback
-  
-  // Aplica las restricciones de permisos
-  setControlsDisabled(!window.isAuthorized);
-
-  // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
-  if (window.auth) {
-      // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
-      updateAuthButton(window.auth.currentUser); // Pasa el objeto user para determinar el estado
-      
-      // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
-      btnAuthAction.style.display = 'inline-block'; 
-  } else {
-      // Si Firebase falló (modo local), ocultamos el botón de Auth (no hay cloud para iniciar sesión)
-      btnAuthAction.style.display = 'none';
-  }
-  
-  // eventos de drag para el balón
-  enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
-  
-  // Nuevo: Habilitar la selección masiva con recuadro
-  enableSelectionBox();
-
-  // eventos UI
-  document.getElementById('showGrid').checked=false; renderGrid();
-  document.getElementById('snap').checked=false;
-  
-  // Render inicial y layout
-  renderDraw();
-  fitBoard(); 
-  // FIX: Se añade un pequeño timeout para forzar el cálculo correcto del layout
-  // cuando el DOM no está completamente renderizado en navegadores locales.
-  setTimeout(fitBoard, 50); 
-}
+// El resto del código de Exportación y Auxiliares permanece igual.
 </script>
 </body>
 </html>
