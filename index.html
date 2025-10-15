@@ -440,7 +440,8 @@ initFirebaseAndApp();
   /* Aseguramos que el dock de herramientas de dibujo se muestre en móvil/tablet */
   @media (max-width: 999px) {
     .dock {
-        display: block; /* Muestra el dock inferior */
+        /* FIX: El dock está vacío, así que lo ocultamos y metemos la reproducción en el menú de hamburguesa */
+        display: none !important;
         position: sticky;
         bottom: 0;
     }
@@ -452,7 +453,7 @@ initFirebaseAndApp();
     /* Habilitar full screen en móvil para el tablero */
     .app { 
         min-height: 100dvh; /* Usamos dvh para viewport height en móvil */
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto 1fr; /* Topbar y Campo */
     }
     .stage {
         padding: 0; /* Eliminar padding del stage para maximizar el tablero */
@@ -559,9 +560,10 @@ initFirebaseAndApp();
           </button>
       </div>
       <div class="menu-content" id="mobileMenuContent">
-          <!-- TODO: Controles de orientación para móvil -->
+          <!-- Controles de orientación para móvil -->
           <div style="padding-top: 10px;">
              <label class="subtle">Orientación del Campo</label>
+             <!-- Mantenemos los botones para que JS pueda asignarles el estado 'active' -->
              <div class="seg" id="orientationSegMobile" style="margin-top: 5px;">
                   <button id="btnLandscapeMobile">Horizontal</button>
                   <button id="btnPortraitMobile">Vertical</button>
@@ -569,6 +571,32 @@ initFirebaseAndApp();
           </div>
           
           <!-- Los contenidos del Sidepanel se moverán aquí en móvil por JS -->
+          <!-- 4. Asistente Táctico Gemini ✨ (CLONADO) -->
+          <!-- 3. Controles de dibujo (CLONADO) -->
+          <!-- 1. Sección de Jugadas (CLONADO) -->
+          <!-- 2. Sección de Timeline y Animación (CLONADO) -->
+          
+          <!-- CONTROLES DE REPRODUCCIÓN (SE MUEVEN DEL DOCK INFERIOR AQUÍ) -->
+          <div id="mobileTimelineControlsFull" class="sidepanel-section" style="display:flex; flex-direction:column; gap:10px;">
+              <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Control de Reproducción</h3>
+              <div class="row">
+                  <span class="pill">Reproducción</span>
+                  <button class="btn" id="btnPlayMobileFull">Play</button>
+                  <button class="btn" id="btnPauseMobileFull">Pause</button>
+                  <button class="btn" id="btnStopMobileFull">Stop</button>
+              </div>
+              <div class="row">
+                  <div class="field grow">
+                      <label>Velocidad (ms)</label>
+                      <input type="number" id="speedMobileFull" min="100" step="100" value="800" style="width:100px"/>
+                  </div>
+              </div>
+              <div class="field grow">
+                  <label>Frame</label>
+                  <input type="range" id="scrubberMobileFull" min="0" max="0" value="0" class="grow"/>
+                  <span id="scrubLblMobileFull" class="subtle">0/0</span>
+              </div>
+          </div>
       </div>
   </div>
 
@@ -2133,7 +2161,7 @@ btnRecord.addEventListener('click',recordFrame);
 
 function updateScrub(){
   // Actualizar los scrubbers de desktop y mobile
-  [scrubber, scrubberMobile].forEach(s => {
+  [scrubber, scrubberMobile, document.getElementById('scrubberMobileFull')].forEach(s => { // AÑADIDO scrubberMobileFull
     if (!s) return; // FIX: Null check
     s.max = Math.max(0, timeline.length - 1);
     const v = parseInt(s.value, 10) || 0;
@@ -2147,6 +2175,7 @@ function updateScrub(){
   
   scrubLbl.textContent = label;
   if(scrubLblMobile) scrubLblMobile.textContent = label; // FIX: Null check
+  if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent = label; // NUEVO: Check de null
 }
 scrubber.addEventListener('input',()=>{ gotoFrame(parseInt(scrubber.value,10)); });
 
@@ -2155,10 +2184,11 @@ function gotoFrame(i){
   i=Math.max(0,Math.min(timeline.length-1,i));
   stopPlayback();
   
-  // Sincronizar el valor del scrubber en ambos elementos (desktop/mobile)
-  [scrubber, scrubberMobile].forEach(s => { if(s) s.value = i; }); // FIX: Null check
+  // Sincronizar el valor del scrubber en todos los elementos (desktop/mobile/full)
+  [scrubber, scrubberMobile, document.getElementById('scrubberMobileFull')].forEach(s => { if(s) s.value = i; }); 
   scrubLbl.textContent=`${i}/${timeline.length-1}`;
-  if(scrubLblMobile) scrubLblMobile.textContent=`${i}/${timeline.length-1}`; // FIX: Null check
+  if(scrubLblMobile) scrubLblMobile.textContent=`${i}/${timeline.length-1}`; 
+  if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent=`${i}/${timeline.length-1}`; 
   
   const f=timeline[i];
   f.players.forEach(p=>{
@@ -2172,10 +2202,13 @@ function gotoFrame(i){
 // Mapeo de eventos de control de reproducción
 btnPlay.addEventListener('click',playTimeline);
 if (btnPlayMobile) btnPlayMobile.addEventListener('click',playTimeline);
+if (document.getElementById('btnPlayMobileFull')) document.getElementById('btnPlayMobileFull').addEventListener('click', playTimeline); // NUEVO
 btnPause.addEventListener('click',()=>{ paused=true; });
 if (btnPauseMobile) btnPauseMobile.addEventListener('click',()=>{ paused=true; });
+if (document.getElementById('btnPauseMobileFull')) document.getElementById('btnPauseMobileFull').addEventListener('click', ()=>{ paused=true; }); // NUEVO
 btnStop.addEventListener('click',stopPlayback);
 if (btnStopMobile) btnStopMobile.addEventListener('click',stopPlayback);
+if (document.getElementById('btnStopMobileFull')) document.getElementById('btnStopMobileFull').addEventListener('click', stopPlayback); // NUEVO
 btnClrTl.addEventListener('click',()=>{ 
     if (window.db && !window.isAuthorized) { showStatus('No autorizado para limpiar la animación.', 'var(--red)'); return; }
     timeline=[]; updateScrub(); stopPlayback(); 
@@ -2204,8 +2237,10 @@ function animate(now){
     // Actualizar labels de scrubbers (Desktop/Mobile)
     scrubber.value = playIdx;
     if(scrubberMobile) scrubberMobile.value = playIdx; // FIX: Null check
+    if(document.getElementById('scrubberMobileFull')) document.getElementById('scrubberMobileFull').value = playIdx; // NUEVO: Check de null
     scrubLbl.textContent=`${playIdx}/${timeline.length-1}`;
     if(scrubLblMobile) scrubLblMobile.textContent=`${playIdx}/${timeline.length-1}`; // FIX: Null check
+    if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent=`${playIdx}/${timeline.length-1}`; // NUEVO: Check de null
 
     if (playIdx>=timeline.length-1){ playing=false; cancelAnimationFrame(rafId); rafId=null; return; }
     fromF=timeline[playIdx]; toF=timeline[playIdx+1]; segStart=performance.now();
@@ -2215,7 +2250,20 @@ function animate(now){
 
 function playTimeline(){
   if (timeline.length<2){ showStatus('Necesitás al menos 2 pasos grabados para animar.', 'var(--warn)'); return; }
-  segDur=Math.max(100, parseInt(speed.value||800,10));
+  
+  // Usar la velocidad del control visible (desktop o móvil completo)
+  const speedEl = document.getElementById('speed');
+  const speedMobileFullEl = document.getElementById('speedMobileFull');
+  
+  let speedVal = 800; // Default
+  if (window.innerWidth >= 1000 && speedEl) {
+      speedVal = parseInt(speedEl.value || 800, 10);
+  } else if (window.innerWidth < 1000 && speedMobileFullEl) {
+       speedVal = parseInt(speedMobileFullEl.value || 800, 10);
+  }
+  
+  segDur=Math.max(100, speedVal);
+  
   if (!paused){
     playIdx=parseInt(scrubber.value,10)||0;
     if (playIdx>=timeline.length-1) playIdx=0;
@@ -2262,7 +2310,7 @@ function drawPlayer(ctx,p){
   
   // Dibujar el número (texto)
   ctx.fillStyle='#fff'; 
-  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial'; 
+  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif'; 
   ctx.textAlign='center'; 
   ctx.textBaseline='middle'; 
   ctx.fillText(p.number,p.x,p.y);
@@ -2298,7 +2346,7 @@ function drawArrowC(ctx,a){
 function drawNoteC(ctx, n) {
     ctx.save();
     ctx.fillStyle = n.color || '#ffffff';
-    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial';
+    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -2639,25 +2687,47 @@ window.initBoardApp = function initBoardApp(){
 function transferSidepanelContent() {
     const desktopPanel = document.getElementById('desktopSidepanel');
     const mobileContainer = document.getElementById('mobileMenuContent');
-    
+    const timelineControlsFull = document.getElementById('mobileTimelineControlsFull');
+
+    // Mover el contenido del sidepanel (Desktop) al modal de hamburguesa
     if (desktopPanel && mobileContainer) {
-        // Clonar las secciones del panel lateral, excepto el contenedor de orientación, que ya está en el modal
-        const sections = desktopPanel.querySelectorAll('.sidepanel-section');
         
-        // Limpiar contenido antiguo (dejando solo los controles de orientación)
+        // Mantener solo el primer div (el de orientación) en el contenedor móvil
         const orientationDiv = mobileContainer.querySelector('div:first-child');
         mobileContainer.innerHTML = '';
         if (orientationDiv) {
             mobileContainer.appendChild(orientationDiv);
         }
+
+        // Secciones a mover/clonar
+        const sections = [
+            document.getElementById('geminiAssistantSection'),
+            document.getElementById('drawingControlsSection'),
+            document.getElementById('playManagementSection'),
+            document.getElementById('timelineSection')
+        ];
         
-        // Clonar y añadir cada sección
+        // Mover/Clonar cada sección al contenedor móvil
         sections.forEach(section => {
-            const clone = section.cloneNode(true);
-            mobileContainer.appendChild(clone);
+            if (section) {
+                const clone = section.cloneNode(true);
+                // Renombrar IDs para evitar duplicados, aunque el código usa los originales.
+                // Es un paso de seguridad para evitar conflictos con listeners.
+                
+                // Mover los controles de animación de la sección timeline al final del modal
+                if (section.id === 'timelineSection' && timelineControlsFull) {
+                    // Mover solo los controles de edición de animación al final de la lista del modal
+                    mobileContainer.appendChild(clone);
+                } else if (section.id === 'timelineSection' && !timelineControlsFull) {
+                    // Si el modal completo de reproducción no existe, movemos la sección normal.
+                    mobileContainer.appendChild(clone);
+                } else {
+                    mobileContainer.appendChild(clone);
+                }
+            }
         });
         
-        // Re-mapear eventos para los elementos clonados
+        // El contenido del sidepanel ha sido transferido, ahora mapeamos eventos
         mapMobileMenuEvents();
     }
 }
@@ -2681,6 +2751,15 @@ function mapMobileMenuEvents() {
     if (btnGeminiAnalyzeClone) btnGeminiAnalyzeClone.addEventListener('click', () => {
         // La lógica de análisis ya está mapeada al botón original, solo cerramos el modal
         mobileMenuModal.classList.remove('open');
+    });
+
+    // Mapeo de Controles de Reproducción Full (clonados)
+    if (document.getElementById('btnPlayMobileFull')) document.getElementById('btnPlayMobileFull').addEventListener('click', () => { playTimeline(); mobileMenuModal.classList.remove('open'); });
+    if (document.getElementById('btnPauseMobileFull')) document.getElementById('btnPauseMobileFull').addEventListener('click', () => { paused = true; });
+    if (document.getElementById('btnStopMobileFull')) document.getElementById('btnStopMobileFull').addEventListener('click', stopPlayback);
+    if (document.getElementById('scrubberMobileFull')) document.getElementById('scrubberMobileFull').addEventListener('input', (e) => { 
+        scrubber.value = e.target.value; 
+        gotoFrame(parseInt(e.target.value, 10)); 
     });
 }
 
