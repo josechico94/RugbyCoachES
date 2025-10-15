@@ -836,7 +836,7 @@ let selectedPlayers = new Set(); // Conjunto para almacenar los elementos DOM de
 // --- NUEVA FUNCIÓN PARA HABILITAR/DESHABILITAR CONTROLES ---
 function setControlsDisabled(disabled) {
     // Botones de Guardar/Eliminar (Top Bar y Side Panel)
-    [btnSavePlay, btnDelete, btnRecord, btnDuplicate, btnClrTl].forEach(btn => { if(btn) btn.disabled = disabled; });
+    [btnSavePlay, btnDelete, btnRecord, btnDuplicate, btnClrTl, autoRec].forEach(btn => { if(btn) btn.disabled = disabled; }); // FIX: Agregado autoRec
     
     // Controles de Dibujo 
     [toolArrows, toolPen, toolText, strokeColor, strokeWidth, dashed, showGrid, btnUndo, btnClear].forEach(el => { if(el) el.disabled = disabled; });
@@ -1287,11 +1287,10 @@ function fitBoard(){
   // FIX: Forzar Portrait en móvil
   if (isMobile) {
       forcePortrait = true; 
-  } else {
-      forcePortrait = false; // Permitir que la detección normal de desktop funcione
   }
   
-  if (isMobile || isPortraitLike()){
+  // La lógica de orientación ahora verifica el estado de forcePortrait, no solo la resolución.
+  if (forcePortrait || isMobile || isPortraitLike()){ // APLICAMOS LA LÓGICA DE DETECCIÓN CORREGIDA
     // Orientación Vertical (Retrato)
     layout.mode='portrait';
     
@@ -1308,7 +1307,7 @@ function fitBoard(){
     boardWrap.style.transform=`rotate(90deg) scale(${scale})`;
     boardWrap.style.transformOrigin='center center'; // Rotación y escala desde el centro
     
-    // Centrado de coordenadas
+    // Centrado de coordenadas (Estas variables ya no controlan el centrado visual, pero son necesarias para clientToBoard)
     const scaledRotatedW = baseH * scale;
     const scaledRotatedH = baseW * scale;
 
@@ -1774,8 +1773,8 @@ if (toolPen) toolPen.addEventListener('click',()=>{ setTool('pen'); closeMobileM
 if (toolText) toolText.addEventListener('click',()=>{ setTool('text'); closeMobileMenu(); }); // NUEVO EVENTO
 
 // Eventos de botones de control móvil (solo necesitan el setTool y cerrar menú)
-if (document.getElementById('btnLandscapeMobile')) document.getElementById('btnLandscapeMobile').addEventListener('click', ()=>{ forcePortrait=false; setSegActive(document.getElementById('btnLandscapeMobile'), document.getElementById('btnPortraitMobile')); fitBoard(); closeMobileMenu(); });
-if (document.getElementById('btnPortraitMobile')) document.getElementById('btnPortraitMobile').addEventListener('click', ()=>{ forcePortrait=true; setSegActive(document.getElementById('btnPortraitMobile'), document.getElementById('btnLandscapeMobile')); fitBoard(); closeMobileMenu(); });
+if (btnLandscapeMobile) btnLandscapeMobile.addEventListener('click', ()=>{ forcePortrait=false; setSegActive(btnLandscapeMobile, btnPortraitMobile); fitBoard(); closeMobileMenu(); });
+if (btnPortraitMobile) btnPortraitMobile.addEventListener('click', ()=>{ forcePortrait=true; setSegActive(btnPortraitMobile, btnLandscapeMobile); fitBoard(); closeMobileMenu(); });
 
 let drawingArrow=false, startPt=null, drawingStroke=false, currentStroke=null;
 
