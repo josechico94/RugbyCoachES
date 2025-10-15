@@ -50,14 +50,12 @@ const getPlayCollectionRef = () => collection(db, `artifacts/${appId}/public/dat
  * Actualiza los permisos y la UI sin recargar la página.
  */
 function handleAuthStateChange(user) {
-    // Si la inicialización falla, user será null y se manejará el estado de "Desconectado" o "Modo Login"
     if (user) {
         // Usuario autenticado
         userId = user.uid;
         window.userId = userId;
 
         // Determinar si es un Entrenador (Authorized)
-        // Es Entrenador si el UID está en la lista Y NO es un usuario anónimo (si permitiéramos anónimos).
         const newIsAuthorized = AUTHORIZED_USERS_IDS.includes(userId);
         window.isAuthorized = newIsAuthorized;
         isAuthorized = newIsAuthorized; // Sincroniza la variable local
@@ -68,7 +66,6 @@ function handleAuthStateChange(user) {
         loginModal.style.display = 'none';
         
         // 3. Actualizar el estado de los controles
-        // Los controles de EDICIÓN se deshabilitan si NO es autorizado.
         setControlsDisabled(!isAuthorized);
         
         // 4. Actualizar el botón de autenticación
@@ -98,7 +95,6 @@ function handleAuthStateChange(user) {
         isAuthorized = false;
         
         // Si no hay usuario activo, aseguramos que los controles estén deshabilitados
-        // pero las funciones de LECTURA (play, cargar) están disponibles.
         setControlsDisabled(true); 
         updateAuthButton(false);
         document.getElementById('brand').innerHTML = `<span class="dot"></span>RugbyBoard Pro (Cloud) (Modo Lector)`;
@@ -110,8 +106,6 @@ function handleAuthStateChange(user) {
 
 
 // **************** CORRECCIÓN 2: MOVER DEFINICIÓN ****************
-// Se mueve la definición de la función principal hacia arriba para evitar errores
-// de referencia cuando es llamada en el catch de initFirebaseAndApp.
 
 /* ---------- Inicialización de la Lógica del Tablero ---------- */
 window.initBoardApp = function initBoardApp(){
@@ -119,10 +113,6 @@ window.initBoardApp = function initBoardApp(){
   createPlayers();
   placeBall();
   
-  // COMENTADO: Ya no se inicializan los campos de nombre de equipo.
-  // team1Name.value = teamConfig.team1.name;
-  // team2Name.value = teamConfig.team2.name;
-
   // Si no hay timeline, crea un frame inicial
   if (!timeline.length) { recordFrame(); }
   updateScrub();
@@ -136,8 +126,6 @@ window.initBoardApp = function initBoardApp(){
   // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
   if (window.auth) {
       // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
-      // NOTA: Si Auth está vivo, onAuthStateChanged ya maneja el estado
-      // No necesitamos lógica aquí, solo asegurar que el botón es visible.
       updateAuthButton(window.auth.currentUser); // Pasa el objeto user para determinar el estado
       
       // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
@@ -194,15 +182,12 @@ async function initFirebaseAndApp() {
         }
         
         // 3. Listener de cambio de estado de autenticación (ASÍNCRONO)
-        // NOTA CLAVE: YA NO INTENTAMOS signInAnonymously. El flujo de lectura (refreshPlayList)
-        // dependerá ahora de la regla de Firebase "allow read: true;" para usuarios no autenticados.
         onAuthStateChanged(auth, (user) => {
             if (user) { 
                 // Usuario autenticado (email/pass)
                 handleAuthStateChange(user);
             } else {
                 // Si NO hay usuario, simplemente pasamos el estado nulo.
-                // Esto fuerza el modo Lector/Desconectado.
                 handleAuthStateChange(null);
             }
         });
@@ -239,7 +224,7 @@ async function initFirebaseAndApp() {
 window.initFirebaseAndApp = initFirebaseAndApp;
 
 // LLAMADA CORREGIDA: Llamamos a la función inmediatamente después de que el módulo esté definido.
-initFirebaseAndApp();
+window.initFirebaseAndApp();
 
 </script>
 <style>
@@ -311,7 +296,7 @@ initFirebaseAndApp();
   /* Bottom dock (tools) */
   .dock{position:sticky;bottom:0;background:linear-gradient(0deg,#0d1f30,#0b1928);border-top:1px solid var(--border);z-index:90}
   /* En móvil, el dock ocupa todo el ancho */
-  .dock-inner{display:grid;grid-template-columns:1fr;gap:10px;padding:10px 12px}
+  .dock-inner{display:grid;grid-template-columns:1fr;gap:10px;padding:10px 14px;} /* Ajuste de padding */
   .row{display:flex;flex-wrap:wrap;gap:8px}
   .field{display:flex;align-items:center;gap:8px;background:#0f2032;border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem}
   .field label{font-size:.85rem;color:var(--muted)}
@@ -377,131 +362,131 @@ initFirebaseAndApp();
   }
 
 
-  /* Responsive layout: panel lateral en desktop */
+  /* ---------------------- ESTILOS DE DESKTOP (Side Panel) ---------------------- */
   @media (min-width: 1000px){
-    .app{grid-template-rows:auto 1fr} /* Ya no hay footer.dock visible debajo de 1000px */
+    .app{grid-template-rows:auto 1fr} /* Eliminar el footer que se muestra abajo */
     .stage{
-        /* CAMBIO CRUCIAL: Invertir el orden de las columnas (panel: 320px, campo: 1fr) */
-        grid-template-columns: 320px 1fr; 
+        grid-template-columns: 320px 1fr; /* Panel a la izquierda */
         gap:14px; 
         padding:12px; 
-        display: grid; /* Usamos grid para las columnas */
-        min-height: calc(100dvh - 70px); /* Altura mínima del viewport menos el topbar */
+        display: grid; 
+        min-height: calc(100dvh - 70px); 
     }
-    .board-viewport { height: 100%; } /* El tablero ocupa toda la altura del stage */
     
     /* Panel lateral: visible en desktop */
     .sidepanel{
+        position: relative; /* Restaura el flujo normal de la grid */
         background:var(--panel);
         border:1px solid var(--border);
         border-radius:12px;
         padding:12px;
-        display:flex; /* Muestra el panel */
+        display:flex; 
         flex-direction:column;
-        /* AJUSTE: Reducir gap de secciones para evitar scroll innecesario */
         gap:12px; 
-        min-height: 100%; /* Ocupa todo el alto */
-        overflow-y: auto; /* Permite scroll si hay mucho contenido */
+        min-height: 100%; 
+        overflow-y: auto; 
+        /* Reset de propiedades móviles */
+        transform: translateX(0) !important;
     }
     
-    /* Ocultamos los controles de la parte inferior que se movieron al sidepanel */
-    .dock{ 
-        display: none; 
-        position: static; 
-        border: none;
-    }
+    .dock, #btnMenuOpen { display: none !important; }
     
-    /* Mostramos el dock de herramientas de dibujo en una columna inferior separada para móvil */
-    #toolDock {
-        display: none; 
-    }
-    .sidepanel #toolDock {
-        display: flex; 
-        flex-direction: column;
-        gap: 10px;
-        margin-top: 12px; /* Espaciado ajustado */
-    }
-    .sidepanel #toolDock .row {
-        flex-wrap: wrap; /* Aseguramos que se envuelva bien en la columna estrecha */
-    }
-    
-    /* AJUSTE: Eliminar padding-top de las secciones que ya tienen margen en el sidepanel */
-    .sidepanel > div {
-        padding-top: 0 !important;
-        border-top: none !important;
-    }
-    /* Añadir separador visual solo entre secciones (excepto la primera) */
-    .sidepanel > div + div {
-        border-top: 1px solid var(--border) !important;
-        padding-top: 12px !important;
-    }
+    /* Reglas de separación visual */
+    .sidepanel-section { padding-top: 0 !important; border-top: none !important; }
+    .sidepanel-section + .sidepanel-section { border-top: 1px solid var(--border) !important; padding-top: 12px !important; }
   }
 
-  /* Aseguramos que el dock de herramientas de dibujo se muestre en móvil/tablet */
+
+  /* ---------------------- ESTILOS DE MOBILE (Hamburguesa y Campo Completo) ---------------------- */
   @media (max-width: 999px) {
-    .dock {
-        /* FIX: El dock está vacío, así que lo ocultamos y metemos la reproducción en el menú de hamburguesa */
-        display: none !important;
-        position: sticky;
-        bottom: 0;
-    }
-    .sidepanel {
-        display: none !important; /* Oculta el panel lateral en móvil */
+    
+    .app { 
+        min-height: 100dvh; 
+        grid-template-rows: auto 1fr; /* Topbar y Campo (El dock inferior está eliminado) */
     }
     
-    /* NUEVOS ESTILOS PARA MOBILE */
-    /* Habilitar full screen en móvil para el tablero */
-    .app { 
-        min-height: 100dvh; /* Usamos dvh para viewport height en móvil */
-        grid-template-rows: auto 1fr; /* Topbar y Campo */
-    }
+    /* Campo de Juego: Prioridad absoluta */
     .stage {
-        padding: 0; /* Eliminar padding del stage para maximizar el tablero */
+        padding: 0; 
         min-height: auto;
+        /* Aseguramos que el campo ocupe el 100% del espacio restante */
+        height: 100%; 
     }
     .board-viewport {
         width: 100%;
-        height: 100%; /* Ocupa todo el espacio grid restante */
+        height: 100%;
+    }
+    
+    /* Ocultar el selector de orientación de la topbar en móvil */
+    .topbar .seg { display: none !important; }
+    
+    /* Botón de Hamburguesa (Abrir menú) */
+    #btnMenuOpen {
+        display: inline-flex;
     }
 
-    /* Estilos del menú desplegable de hamburguesa */
-    #mobileMenuModal {
+    /* Ocultar el sidepanel DE ESCRITORIO y transformarlo en el menú de hamburguesa */
+    .sidepanel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 300px;
+        max-width: 85vw;
+        z-index: 1000;
+        background: var(--bg);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-out;
+        box-shadow: 4px 0 10px rgba(0,0,0,0.5);
+        padding-top: 60px; /* Para dejar espacio al header del menú */
+        display: flex; /* Mostrar como flex para el contenido */
+    }
+    
+    /* Clase para mostrar el menú */
+    .sidepanel.open {
+        transform: translateX(0);
+    }
+    
+    /* El dock inferior ha sido eliminado */
+    .dock { display: none !important; }
+    
+    /* Overlay para cerrar el menú con un tap */
+    #menuOverlay {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        background: var(--bg);
-        z-index: 1001;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
         display: none;
-        overflow-y: auto;
-        padding: 12px;
-        padding-top: 60px; /* Espacio para el header fijo */
     }
-    #mobileMenuModal.open {
+    #menuOverlay.open {
         display: block;
     }
-    #mobileMenuModal .menu-header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: var(--panel);
-        border-bottom: 1px solid var(--border);
-        padding: 10px 14px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        z-index: 1002;
-    }
-    #mobileMenuModal .menu-content {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
+    
   }
 
-  /* Ícono de hamburguesa y close (SVG inline o FontAwesome) */
+  /* Estilos del header del menú de hamburguesa (para móvil) */
+  #menuHeader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      z-index: 1001;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+  }
+  .sidepanel.open ~ #menuHeader {
+      display: flex;
+  }
+
+  /* Ícono de hamburguesa */
   .icon-btn {
     background: none;
     border: none;
@@ -515,16 +500,12 @@ initFirebaseAndApp();
     width: 24px;
     height: 24px;
   }
-  /* Ocultamos el botón de hamburguesa en desktop */
-  #btnMobileMenu {
+  #btnMenuOpen {
       display: none;
   }
   @media (max-width: 999px) {
-      #btnMobileMenu {
+      #btnMenuOpen {
           display: inline-block;
-      }
-      .toolbar > .seg {
-          display: none; /* Ocultamos el selector de orientación de la topbar móvil para que esté en el menú */
       }
   }
 
@@ -534,6 +515,9 @@ initFirebaseAndApp();
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 </head>
 <body>
+  <!-- Overlay para cerrar menú móvil con tap -->
+  <div id="menuOverlay" style="display:none;"></div>
+
   <!-- Modal de Login -->
   <div class="modal-overlay" id="loginModal">
     <div class="modal-content">
@@ -549,55 +533,14 @@ initFirebaseAndApp();
     </div>
   </div>
   
-  <!-- Modal de Menú de Hamburguesa (Solo en Móvil) -->
-  <div id="mobileMenuModal">
-      <div class="menu-header">
-          <span class="brand" style="font-size: 1.1rem;"><span class="dot"></span>Opciones de Edición</span>
-          <button class="icon-btn" id="btnCloseMenu">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
-          </button>
-      </div>
-      <div class="menu-content" id="mobileMenuContent">
-          <!-- Controles de orientación para móvil -->
-          <div style="padding-top: 10px;">
-             <label class="subtle">Orientación del Campo</label>
-             <!-- Mantenemos los botones para que JS pueda asignarles el estado 'active' -->
-             <div class="seg" id="orientationSegMobile" style="margin-top: 5px;">
-                  <button id="btnLandscapeMobile">Horizontal</button>
-                  <button id="btnPortraitMobile">Vertical</button>
-             </div>
-          </div>
-          
-          <!-- Los contenidos del Sidepanel se moverán aquí en móvil por JS -->
-          <!-- 4. Asistente Táctico Gemini ✨ (CLONADO) -->
-          <!-- 3. Controles de dibujo (CLONADO) -->
-          <!-- 1. Sección de Jugadas (CLONADO) -->
-          <!-- 2. Sección de Timeline y Animación (CLONADO) -->
-          
-          <!-- CONTROLES DE REPRODUCCIÓN (SE MUEVEN DEL DOCK INFERIOR AQUÍ) -->
-          <div id="mobileTimelineControlsFull" class="sidepanel-section" style="display:flex; flex-direction:column; gap:10px;">
-              <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Control de Reproducción</h3>
-              <div class="row">
-                  <span class="pill">Reproducción</span>
-                  <button class="btn" id="btnPlayMobileFull">Play</button>
-                  <button class="btn" id="btnPauseMobileFull">Pause</button>
-                  <button class="btn" id="btnStopMobileFull">Stop</button>
-              </div>
-              <div class="row">
-                  <div class="field grow">
-                      <label>Velocidad (ms)</label>
-                      <input type="number" id="speedMobileFull" min="100" step="100" value="800" style="width:100px"/>
-                  </div>
-              </div>
-              <div class="field grow">
-                  <label>Frame</label>
-                  <input type="range" id="scrubberMobileFull" min="0" max="0" value="0" class="grow"/>
-                  <span id="scrubLblMobileFull" class="subtle">0/0</span>
-              </div>
-          </div>
-      </div>
+  <!-- Contenedor del header móvil (solo para el menú desplegado) -->
+  <div id="menuHeader">
+      <span class="brand" style="font-size: 1.1rem;"><span class="dot"></span>Controles</span>
+      <button class="icon-btn" id="btnCloseMenu">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+      </button>
   </div>
 
 
@@ -623,7 +566,7 @@ initFirebaseAndApp();
         <!-- BOTÓN DE LOGIN/LOGOUT -->
         <button class="btn primary" id="btnAuthAction">Modo Entrenador</button>
         <!-- BOTÓN DE HAMBURGUESA (SOLO MÓVIL) -->
-         <button class="icon-btn" id="btnMobileMenu">
+         <button class="icon-btn" id="btnMenuOpen">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
               </svg>
@@ -634,8 +577,19 @@ initFirebaseAndApp();
     <!-- Main stage -->
     <main class="stage">
       
-      <!-- Panel lateral (Desktop) / Contenedor de herramientas (Móvil) -->
+      <!-- Panel lateral (Desktop) / Menú Desplegable (Móvil) -->
       <aside class="sidepanel" id="desktopSidepanel">
+          
+        <!-- ---------------------- CONTROLES DE ESCRITORIO / HAMBURGUESA MÓVIL ---------------------- -->
+        
+        <!-- CONTROLES DE ORIENTACIÓN EN MÓVIL -->
+        <div id="mobileOrientationControls" class="sidepanel-section mobile-only" style="display:none; flex-direction:column; gap:10px;">
+             <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Orientación</h3>
+             <div class="seg" style="margin-top: 5px;">
+                  <button id="btnLandscapeMobile">Horizontal</button>
+                  <button id="btnPortraitMobile">Vertical</button>
+             </div>
+        </div>
 
         <!-- 4. Asistente Táctico Gemini ✨ -->
         <div id="geminiAssistantSection" class="sidepanel-section" style="display:flex; flex-direction:column; gap:10px;">
@@ -771,24 +725,8 @@ initFirebaseAndApp();
       </section>
     </main>
 
-    <!-- Bottom dock / Tools (Visible en Mobile/Tablet para Controles de Reproducción) -->
-    <footer class="dock" id="toolDock">
-      <div class="dock-inner" id="mobileTimelineControls">
-        <!-- Controles de Jugada/Timeline para MÓVIL (SOLO REPRODUCCIÓN) -->
-        <div class="row">
-            <span class="pill">Timeline</span>
-            <button class="btn" id="btnPlayMobile">Play</button>
-            <button class="btn" id="btnPauseMobile">Pause</button>
-            <button class="btn" id="btnStopMobile">Stop</button>
-            <div class="field grow">
-              <label>Frame</label>
-              <input type="range" id="scrubberMobile" min="0" max="0" value="0" class="grow"/>
-              <span id="scrubLblMobile" class="subtle">0/0</span>
-            </div>
-          </div>
-          <!-- Velocidad y otros controles quedan en el menú de hamburguesa -->
-      </div>
-    </footer>
+    <!-- Eliminamos el Dock Inferior (Mobile) que causaba duplicidades -->
+    <!-- <footer class="dock" id="toolDock"> ... </footer> -->
   </div>
   
 <script>
@@ -807,6 +745,7 @@ const CELL_W = WIDTH / FIELD_GRID_W;
 const CELL_H = HEIGHT / FIELD_GRID_H;
 
 /* ---------- DOM ---------- */
+const desktopSidepanel = document.getElementById('desktopSidepanel'); // Contenedor principal de controles
 const boardViewport = document.getElementById('boardViewport');
 const boardWrap = document.getElementById('boardWrap');
 const board = document.getElementById('board');
@@ -819,6 +758,7 @@ const ctx = exportCanvas.getContext('2d');
 const selectionBox = document.getElementById('selectionBox'); 
 const loginModal = document.getElementById('loginModal'); // Nuevo DOM ID
 const btnAuthAction = document.getElementById('btnAuthAction'); // Nuevo DOM ID
+const menuOverlay = document.getElementById('menuOverlay'); // Nuevo DOM ID
 
 /* Topbar / acciones */
 const btnLandscape = document.getElementById('btnLandscape');
@@ -829,7 +769,7 @@ const btnLoadPlay = document.getElementById('btnLoadPlay');
 const btnExportJpg = document.getElementById('btnExportJpg');
 const btnExportWebm = document.getElementById('btnExportWebm');
 const btnExportMp4 = document.getElementById('btnExportMp4');
-const btnMobileMenu = document.getElementById('btnMobileMenu'); // NUEVO BOTÓN HAMBURGUESA
+const btnMenuOpen = document.getElementById('btnMenuOpen'); // NUEVO BOTÓN HAMBURGUESA
 
 /* Dock herramientas (Desktop: en Sidepanel) */
 const toolArrows = document.getElementById('toolArrows');
@@ -863,35 +803,12 @@ const scrubLbl = document.getElementById('scrubLbl');
 const btnGeminiAnalyze = document.getElementById('btnGeminiAnalyze');
 const geminiAssistantOutput = document.getElementById('geminiAssistantOutput');
 
-
-/* Controles Móviles (Ahora dentro del Modal de Hamburguesa o Dock) */
-const mobileMenuModal = document.getElementById('mobileMenuModal');
-const btnCloseMenu = document.getElementById('btnCloseMenu');
-const mobileMenuContent = document.getElementById('mobileMenuContent');
-// Controles de Orientación Móvil
+// Controles de Orientación Móvil (Ahora solo se usan para el evento, no para el valor)
 const btnLandscapeMobile = document.getElementById('btnLandscapeMobile');
 const btnPortraitMobile = document.getElementById('btnPortraitMobile');
 
-
-/* Sincronización de Controles Móviles (Referencias al DOM en el Modal) */
-// Estos elementos se mapean a los del panel lateral (Desktop) cuando se cargan en el modal.
-const playNameMobile = document.getElementById('playNameMobile');
-const btnDuplicateMobile = document.getElementById('btnDuplicateMobile');
-const playListMobile = document.getElementById('playListMobile');
-const btnLoadPlayMobile = document.getElementById('btnLoadPlayMobile');
-const btnDeleteMobile = document.getElementById('btnDeleteMobile');
-const btnRecordMobile = document.getElementById('btnRecordMobile');
-const btnPlayMobile = document.getElementById('btnPlayMobile'); // En dock inferior, no en modal
-const btnPauseMobile = document.getElementById('btnPauseMobile'); // En dock inferior
-const btnStopMobile = document.getElementById('btnStopMobile'); // En dock inferior
-const scrubberMobile = document.getElementById('scrubberMobile'); // En dock inferior
-const scrubLblMobile = document.getElementById('scrubLblMobile'); // En dock inferior
-const strokeColorMobile = document.getElementById('strokeColorMobile');
-const strokeWidthMobile = document.getElementById('strokeWidthMobile');
-const toolArrowsMobile = document.getElementById('toolArrowsMobile');
-const toolPenMobile = document.getElementById('toolPenMobile');
-const toolTextMobile = document.getElementById('toolTextMobile');
-
+// NO HAY MÁS REFERENCIAS A DOM MOBILE DUPLICADAS (playNameMobile, scrubberMobile, etc.)
+// SOLO USAMOS LOS IDS ORIGINALES DEL PANEL LATERAL.
 
 // Variables de estado del tablero
 let arrows=[], strokes=[], notes=[], timeline=[]; // NUEVO ARRAY NOTES
@@ -913,16 +830,10 @@ let selectedPlayers = new Set(); // Conjunto para almacenar los elementos DOM de
 // --- NUEVA FUNCIÓN PARA HABILITAR/DESHABILITAR CONTROLES ---
 function setControlsDisabled(disabled) {
     // Botones de Guardar/Eliminar (Top Bar y Side Panel)
-    [btnSavePlay, btnDelete, btnDeleteMobile].forEach(btn => { if(btn) btn.disabled = disabled; });
+    [btnSavePlay, btnDelete, btnRecord, btnDuplicate, btnClrTl].forEach(btn => { if(btn) btn.disabled = disabled; });
     
-    // Controles de Dibujo (Side Panel)
+    // Controles de Dibujo 
     [toolArrows, toolPen, toolText, strokeColor, strokeWidth, dashed, snap, showGrid, btnUndo, btnClear].forEach(el => { if(el) el.disabled = disabled; });
-    
-    // Controles de Dibujo (Mobile Dock) - Usamos una lista de elementos que PUEDEN existir
-    [toolArrowsMobile, toolPenMobile, toolTextMobile, strokeColorMobile, strokeWidthMobile, document.getElementById('btnUndoMobile'), document.getElementById('btnClearMobile')].forEach(el => { if(el) el.disabled = disabled; });
-
-    // Controles de Jugada/Grabación
-    [playName, playNameMobile, btnDuplicate, btnDuplicateMobile, btnRecord, btnRecordMobile, autoRec, btnClrTl].forEach(el => { if(el) el.disabled = disabled; });
     
     // Controles de Movimiento de Jugadores/Balón (se reactivan con reInitializePlayerInteractions() si es Entrenador)
     board.style.pointerEvents = disabled ? 'none' : 'auto';
@@ -931,7 +842,8 @@ function setControlsDisabled(disabled) {
 
 
     // SIEMPRE HABILITAR CARGAR, PLAY Y LISTAS para MODO ESPECTADOR (disabled=false)
-    [btnLoadPlay, btnLoadPlayMobile, playList, playListMobile, btnPlay, btnPause, btnStop, scrubber, scrubberMobile].forEach(el => { if(el) el.disabled = false; });
+    [btnLoadPlay, playList, btnPlay, btnPause, btnStop, scrubber].forEach(el => { if(el) el.disabled = false; });
+    
     // Habilitar botón de Reset sólo para Entrenadores
     btnReset.disabled = !window.isAuthorized;
 }
@@ -980,7 +892,6 @@ async function savePlay(name) {
             localStorage.setItem(getPlayKey(playId), JSON.stringify(payload));
             refreshPlayList();
             playName.value = name;
-            if (playNameMobile) playNameMobile.value = name; // Check de null
             showStatus('Jugada guardada LOCALMENTE!', 'var(--warn)');
         } catch (e) {
             console.error("Error saving to local storage:", e);
@@ -1027,8 +938,8 @@ function applyTeamConfigToPlayers() {
 
 // 3. Cargar Jugada Seleccionada (Unificada)
 function loadPlay(playId) {
-    // Usamos la lista de desktop como fuente de datos principal
-    const listToUse = window.innerWidth >= 1000 ? playList : playListMobile;
+    // Solo usamos playList (desktop) como referencia
+    const listToUse = playList;
     const option = Array.from(listToUse.options).find(opt => opt.value === playId);
 
     if (!option || !option.dataset.payload) {
@@ -1042,15 +953,10 @@ function loadPlay(playId) {
         // SINCRONIZACIÓN DE CONFIGURACIÓN DE EQUIPOS
         if (data.teamConfig) {
             teamConfig = data.teamConfig;
-            
-            // COMENTADO: Ya no se actualizan los campos de entrada de nombres, ya que están ocultos.
-            // team1Name.value = teamConfig.team1.name;
-            // team2Name.value = teamConfig.team2.name;
         }
         
         // Sincronizar campos de texto
         playName.value = data.name || playId;
-        if (playNameMobile) playNameMobile.value = data.name || playId;
         
         // 1. Cargar posiciones de jugadores
         playersLayer.innerHTML = '';
@@ -1092,29 +998,28 @@ function loadPlay(playId) {
 }
 
 function populatePlayList(jugadas) {
-    [playList, playListMobile].forEach(list => {
-        if (!list) return; // FIX: Null Check
-        list.innerHTML = '';
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = jugadas.length > 0 ? '--- Seleccionar Jugada ---' : 'No hay jugadas guardadas';
-        placeholder.disabled = true;
-        placeholder.selected = true;
-        list.appendChild(placeholder);
-        
-        jugadas.forEach(j => {
-            const opt = document.createElement('option');
-            opt.value = j.id;
-            opt.textContent = j.name;
-            opt.dataset.payload = j.payload;
-            list.appendChild(opt);
-        });
-
-        // La lista y el botón Cargar SIEMPRE deben estar habilitados para el espectador
-        list.disabled = false;
+    const listToUse = playList;
+    if (!listToUse) return; // FIX: Null Check
+    listToUse.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = jugadas.length > 0 ? '--- Seleccionar Jugada ---' : 'No hay jugadas guardadas';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    listToUse.appendChild(placeholder);
+    
+    jugadas.forEach(j => {
+        const opt = document.createElement('option');
+        opt.value = j.id;
+        opt.textContent = j.name;
+        opt.dataset.payload = j.payload;
+        listToUse.appendChild(opt);
     });
 
-    [btnLoadPlay, btnLoadPlayMobile, playList, playListMobile].forEach(el => { if(el) el.disabled = false; });
+    // La lista y el botón Cargar SIEMPRE deben estar habilitados para el espectador
+    listToUse.disabled = false;
+
+    if (btnLoadPlay) btnLoadPlay.disabled = false; // Solo el botón de cargar es necesario
 }
 
 // 4. Suscripción/Refresco de la lista
@@ -1126,18 +1031,18 @@ function refreshPlayList() {
         // Verificamos que el usuario esté autenticado ANTES de intentar leer de Firestore
         if (!window.db || !window.auth || !window.auth.currentUser) {
             // AJUSTE DE UI: Si no hay usuario, mostramos el mensaje correcto
-            [playList, playListMobile].forEach(list => {
-                if (!list) return; // FIX: Null Check
+            if (playList) {
                 // Estado desconectado
-                list.innerHTML = '<option value="">Modo Lector: No Autenticado</option>';
-                list.disabled = true; // Deshabilita la lista hasta que haya un UID/conexión
-            });
+                playList.innerHTML = '<option value="">Modo Lector: No Autenticado</option>';
+                playList.disabled = true; // Deshabilita la lista hasta que haya un UID/conexión
+            }
             // Si no hay usuario, NO intentamos onSnapshot, y no hay error de permisos.
             return; 
         } 
         
         // HABILITAR LISTAS y BOTONES DE LECTURA (ya que hay un UID)
-        [playList, playListMobile, btnLoadPlay, btnLoadPlayMobile].forEach(el => { if(el) el.disabled = false; });
+        if (playList) playList.disabled = false;
+        if (btnLoadPlay) btnLoadPlay.disabled = false;
 
         // La consulta es a la colección pública
         const q = window.query(window.getPlayCollectionRef());
@@ -1176,67 +1081,38 @@ function refreshPlayList() {
 /* -------------------------------------------------------------------------- */
 
 
-/* ---------- Eventos de Configuración de Equipos ---------- */
-
-// COMENTADO: Mapear cambios de nombre de equipo 1 (Azul)
-// team1Name.addEventListener('input', () => {
-//     teamConfig.team1.name = team1Name.value;
-// });
-
-// COMENTADO: Mapear cambios de nombre de equipo 2 (Rojo)
-// team2Name.addEventListener('input', () => {
-//     teamConfig.team2.name = team2Name.value;
-// });
-
 /* ---------- Eventos de Persistencia (Mapeo a funciones unificadas) ---------- */
 
 // Eventos para Desktop
 btnSavePlay.addEventListener('click', async () => {
-    const name = (playName.value || (playNameMobile ? playNameMobile.value : '') || '').trim(); 
+    const name = (playName.value || '').trim(); 
     if(!name) { showStatus('¡Poné un nombre para guardar la jugada!', 'var(--warn)'); return; }
     await savePlay(name);
 });
 
 btnDelete.addEventListener('click', async () => {
-    const listToUse = window.innerWidth >= 1000 ? playList : playListMobile;
-    const playId = listToUse.value; 
+    const playId = playList.value; 
     if (!playId) { showStatus('Elegí una jugada para eliminar.', 'var(--warn)'); return; }
-    if (!confirm(`¿Estás seguro de eliminar la jugada "${listToUse.options[listToUse.selectedIndex].textContent}"?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar la jugada "${playList.options[playList.selectedIndex].textContent}"?`)) return;
     await deletePlay(playId);
 });
 
 btnLoadPlay.addEventListener('click', () => {
-    const listToUse = window.innerWidth >= 1000 ? playList : playListMobile;
-    if (!listToUse.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
-    loadPlay(listToUse.value);
+    if (!playList.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
+    loadPlay(playList.value);
 });
 
 playList.addEventListener('change', () => { 
     if (!playList.options[playList.selectedIndex]) return;
     selectedOption = playList.options[playList.selectedIndex];
     playName.value = selectedOption.textContent;
-    if (playNameMobile) playNameMobile.value = selectedOption.textContent;
-    if (playListMobile) playListMobile.value = selectedOption.value;
 });
 
-// Eventos para Mobile (Sincronización de llamadas a Desktop)
-if (playNameMobile) playNameMobile.addEventListener('input', (e) => { playName.value = e.target.value; });
-if (btnLoadPlayMobile) btnLoadPlayMobile.addEventListener('click', () => { 
-    if (!playListMobile.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
-    loadPlay(playListMobile.value);
-});
-if (playListMobile) playListMobile.addEventListener('change', (e) => {
-    selectedOption = playListMobile.options[playListMobile.selectedIndex];
-    playName.value = selectedOption.textContent;
-    if (playNameMobile) playNameMobile.value = selectedOption.textContent;
-    playList.value = selectedOption.value;
-});
-if (btnDeleteMobile) btnDeleteMobile.addEventListener('click', async () => {
-    const playId = playListMobile.value; 
-    if (!playId) { showStatus('Elegí una jugada para eliminar.', 'var(--warn)'); return; }
-    if (!confirm(`¿Estás seguro de eliminar la jugada "${playListMobile.options[playListMobile.selectedIndex].textContent}"?`)) return;
-    await deletePlay(playId);
-});
+// Eventos para Mobile (Sincronización)
+if (document.getElementById('playNameMobile')) document.getElementById('playNameMobile').addEventListener('input', (e) => { playName.value = e.target.value; });
+if (document.getElementById('btnLoadPlayMobile')) document.getElementById('btnLoadPlayMobile').addEventListener('click', () => { btnLoadPlay.click(); });
+if (document.getElementById('playListMobile')) document.getElementById('playListMobile').addEventListener('change', (e) => { playList.value = e.target.value; playName.value = e.target.options[e.target.selectedIndex].textContent; });
+if (document.getElementById('btnDeleteMobile')) document.getElementById('btnDeleteMobile').addEventListener('click', async () => { btnDelete.click(); });
 
 
 /* -------------------------------------------------------------------------- */
@@ -1289,7 +1165,6 @@ btnLogin.addEventListener('click', async () => {
     try {
         await window.signInWithEmailAndPassword(window.auth, email, password);
         // Si tiene éxito, el onAuthStateChanged se disparará, actualizando la UI.
-        // El modal se cierra en handleAuthStateChange.
         loginMessage.textContent = ''; // Limpiar mensaje de login
 
     } catch (error) {
@@ -1328,7 +1203,6 @@ async function handleLogout() {
         try {
             await window.signOut(window.auth);
             showStatus('Sesión cerrada. Iniciando modo Espectador...', 'var(--accent)');
-            // onAuthStateChanged manejará el cambio de permisos, forzando un login anónimo
         } catch (error) {
             showStatus('Error al cerrar sesión.', 'var(--red)');
             console.error("Logout failed:", error);
@@ -1375,11 +1249,6 @@ function setSegActive(segBtn, otherBtn){
 btnLandscape.addEventListener('click', ()=>{ forcePortrait=false; setSegActive(btnLandscape,btnPortrait); fitBoard(); });
 btnPortrait.addEventListener('click', ()=>{ forcePortrait=true; setSegActive(btnPortrait,btnLandscape); fitBoard(); });
 
-// Eventos para botones de orientación en el modal móvil
-if (btnLandscapeMobile) btnLandscapeMobile.addEventListener('click', ()=>{ forcePortrait=false; setSegActive(btnLandscapeMobile, btnPortraitMobile); fitBoard(); });
-if (btnPortraitMobile) btnPortraitMobile.addEventListener('click', ()=>{ forcePortrait=true; setSegActive(btnPortraitMobile, btnLandscapeMobile); fitBoard(); });
-
-
 function isPortraitLike(){
   if (forcePortrait) return true;
   const mq=window.matchMedia('(orientation: portrait)');
@@ -1408,32 +1277,17 @@ function fitBoard(){
   let currentW, currentH; // Dimensiones del campo tal como se verá en el viewport
   let scale;
 
-  if (!isPortraitLike()){
-    // Orientación Horizontal (Paisaje)
-    layout.mode='landscape';
-    currentW = baseW;
-    currentH = baseH;
-    
-    // Escala el campo para que se ajuste al 100% del contenedor
-    scale = Math.min(availW/currentW, availH/currentH);
-    
-    layout.scale=scale;
-    
-    // Centrado: calcula la traducción (tx, ty) para centrar el campo escalado
-    // CORRECCIÓN DE CENTRADO: Ya no necesitamos tx/ty en la transformación porque el CSS (display:flex)
-    // se encarga del centrado. Simplemente pasamos el offset de escala a clientToBoard.
-    layout.tx = (availW - currentW * scale) / 2;
-    layout.ty = (availH - currentH * scale) / 2;
-    
-    // Aplica transformación: SOLO escalado
-    boardWrap.style.transform=`scale(${scale})`;
-    boardWrap.style.transformOrigin='center center'; // Centrado desde el centro para flexbox
-    
-    // Sincronizar botones de orientación
-    setSegActive(btnLandscape, btnPortrait);
-    if(btnLandscapeMobile) setSegActive(btnLandscapeMobile, btnPortraitMobile);
-
+  // LÓGICA DE DETECCIÓN DE MÓVIL/ESCRITORIO
+  const isMobile = window.innerWidth <= 999;
+  
+  // FIX: Forzar Portrait en móvil
+  if (isMobile) {
+      forcePortrait = true; 
   } else {
+      forcePortrait = false; // Permitir que la detección normal de desktop funcione
+  }
+  
+  if (isMobile || isPortraitLike()){
     // Orientación Vertical (Retrato)
     layout.mode='portrait';
     
@@ -1446,17 +1300,11 @@ function fitBoard(){
 
     layout.scale=scale;
     
-    // Centrado del contenedor ROTADO (Aseguramos que la rotación se haga alrededor del centro)
-    
-    // Rotamos 90 grados alrededor del centro del wrap
-    // El wrap (1200x700) se centra dentro del viewport (availWxavailH) por CSS (flexbox).
-    // Solo necesitamos aplicar la rotación y la escala.
-    
     // Aplicamos transformación: Rotación y escalado alrededor del centro (50% 50%)
     boardWrap.style.transform=`rotate(90deg) scale(${scale})`;
     boardWrap.style.transformOrigin='center center'; // Rotación y escala desde el centro
     
-    // Calculamos el offset de centrado para el cálculo de coordenadas, aunque CSS haga el trabajo visual.
+    // Centrado de coordenadas
     const scaledRotatedW = baseH * scale;
     const scaledRotatedH = baseW * scale;
 
@@ -1465,11 +1313,40 @@ function fitBoard(){
 
     // Sincronizar botones de orientación
     setSegActive(btnPortrait, btnLandscape);
-    if(btnPortraitMobile) setSegActive(btnPortraitMobile, btnLandscapeMobile);
+    // Asignar el estado al botón correcto en el menú desplegable (si existe)
+    if (document.getElementById('btnPortraitMobile')) setSegActive(document.getElementById('btnPortraitMobile'), document.getElementById('btnLandscapeMobile'));
+    
+  } else {
+    // Orientación Horizontal (Paisaje)
+    layout.mode='landscape';
+    currentW = baseW;
+    currentH = baseH;
+    
+    // Escala el campo para que se ajuste al 100% del contenedor
+    scale = Math.min(availW/currentW, availH/currentH);
+    
+    layout.scale=scale;
+    
+    // Centrado: calcula la traducción (tx, ty) para centrar el campo escalado
+    layout.tx = (availW - currentW * scale) / 2;
+    layout.ty = (availH - currentH * scale) / 2;
+    
+    // Aplica transformación: SOLO escalado
+    boardWrap.style.transform=`scale(${scale})`;
+    boardWrap.style.transformOrigin='center center'; // Centrado desde el centro para flexbox
+    
+    // Sincronizar botones de orientación
+    setSegActive(btnLandscape, btnPortrait);
+    if (document.getElementById('btnLandscapeMobile')) setSegActive(document.getElementById('btnLandscapeMobile'), document.getElementById('btnPortraitMobile'));
+
   }
 
   applyUprightTransforms();
 }
+
+window.addEventListener('resize', fitBoard);
+window.addEventListener('orientationchange', fitBoard);
+
 
 /* ---------- Utilidades coordenadas (CORREGIDA) ---------- */
 function clientToBoard(e){
@@ -1893,29 +1770,30 @@ const setTool = (newTool, targetButton) => {
     clearPlayerSelection(); // Limpiar selección al cambiar de herramienta
     
     // Desactivar todos los botones de herramienta
-    [toolArrows, toolPen, toolText, toolArrowsMobile, toolPenMobile, toolTextMobile].forEach(btn => {
+    [toolArrows, toolPen, toolText, document.getElementById('toolArrowsMobile'), document.getElementById('toolPenMobile'), document.getElementById('toolTextMobile')].forEach(btn => {
         if (btn) btn.classList.remove('active');
     });
     
-    // Activar el botón correcto
+    // Activar el botón correcto (se usan los IDs de escritorio y se replican en móvil si existen)
     if (newTool === 'arrows') {
         if(toolArrows) toolArrows.classList.add('active');
-        if(toolArrowsMobile) toolArrowsMobile.classList.add('active');
+        if(document.getElementById('toolArrowsMobile')) document.getElementById('toolArrowsMobile').classList.add('active');
     } else if (newTool === 'pen') {
         if(toolPen) toolPen.classList.add('active');
-        if(toolPenMobile) toolPenMobile.classList.add('active');
+        if(document.getElementById('toolPenMobile')) document.getElementById('toolPenMobile').classList.add('active');
     } else if (newTool === 'text') {
         if(toolText) toolText.classList.add('active');
-        if(toolTextMobile) toolTextMobile.classList.add('active');
+        if(document.getElementById('toolTextMobile')) document.getElementById('toolTextMobile').classList.add('active');
     }
 };
 
-if (toolArrows) toolArrows.addEventListener('click',()=>{ setTool('arrows'); });
-if (toolPen) toolPen.addEventListener('click',()=>{ setTool('pen'); });
-if (toolText) toolText.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO
-if (toolArrowsMobile) toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); });
-if (toolPenMobile) toolPenMobile.addEventListener('click',()=>{ setTool('pen'); });
-if (toolTextMobile) toolTextMobile.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO MOVIL
+if (toolArrows) toolArrows.addEventListener('click',()=>{ setTool('arrows'); closeMobileMenu(); });
+if (toolPen) toolPen.addEventListener('click',()=>{ setTool('pen'); closeMobileMenu(); });
+if (toolText) toolText.addEventListener('click',()=>{ setTool('text'); closeMobileMenu(); }); // NUEVO EVENTO
+
+// Eventos de botones de control móvil (solo necesitan el setTool y cerrar menú)
+if (document.getElementById('btnLandscapeMobile')) document.getElementById('btnLandscapeMobile').addEventListener('click', ()=>{ forcePortrait=false; setSegActive(document.getElementById('btnLandscapeMobile'), document.getElementById('btnPortraitMobile')); fitBoard(); closeMobileMenu(); });
+if (document.getElementById('btnPortraitMobile')) document.getElementById('btnPortraitMobile').addEventListener('click', ()=>{ forcePortrait=true; setSegActive(document.getElementById('btnPortraitMobile'), document.getElementById('btnLandscapeMobile')); fitBoard(); closeMobileMenu(); });
 
 let drawingArrow=false, startPt=null, drawingStroke=false, currentStroke=null;
 
@@ -1981,32 +1859,10 @@ function renderDraw(){
   });
 }
 
-// Sincronizar colores y grosor de dibujo (Desktop a Mobile y viceversa)
-function syncDrawingTools(){
-    // Esta función ya no necesita sincronizar el estado, solo asegura que el UI lea del selector visible.
-    // Lo eliminamos para reducir la complejidad.
-}
-if (strokeColor) strokeColor.addEventListener('change', syncDrawingTools);
-if (strokeWidth) strokeWidth.addEventListener('change', syncDrawingTools);
-if (strokeColorMobile) strokeColorMobile.addEventListener('change', syncDrawingTools);
-if (strokeWidthMobile) strokeWidthMobile.addEventListener('change', syncDrawingTools);
-
-// Helper para obtener el valor del control activo (desktop o mobile)
-function getActiveControlValue(desktopId, mobileId) {
-    const desktopEl = document.getElementById(desktopId);
-    const mobileEl = document.getElementById(mobileId);
-    
-    // Si la pantalla es grande, se usa el panel lateral. Si es pequeña, el dock inferior.
-    if (window.innerWidth >= 1000) {
-        return desktopEl ? desktopEl.value : (desktopEl.checked || false);
-    } else {
-        // En móvil, algunos controles se usan de forma indirecta, pero usaremos los IDs de móvil si están presentes.
-        return mobileEl ? mobileEl.value : (mobileEl.checked || false);
-    }
-}
-function getActiveToolColor() { return getActiveControlValue('strokeColor', 'strokeColorMobile'); }
-function getActiveToolWidth() { return parseInt(getActiveControlValue('strokeWidth', 'strokeWidthMobile'), 10) || 5; }
-function getActiveDashed() { return document.getElementById('dashed') ? document.getElementById('dashed').checked : false; } // Solo hay uno para dashed
+// Helper para obtener el valor del control activo (SOLO DESKTOP AHORA)
+function getActiveToolColor() { return strokeColor.value; }
+function getActiveToolWidth() { return parseInt(strokeWidth.value, 10) || 5; }
+function getActiveDashed() { return dashed.checked; }
 
 board.addEventListener('pointerdown',e=>{
   if (e.target.closest('.player') || e.target.closest('#ball')) return;
@@ -2102,7 +1958,7 @@ board.addEventListener('pointerup',e=>{
   }
 },{passive:false});
 
-// Mapeo de eventos de deshacer/limpiar para Mobile
+// Mapeo de eventos de deshacer/limpiar
 btnUndo.addEventListener('click',()=>{
   if (window.db && !window.isAuthorized) { showStatus('No autorizado para deshacer.', 'var(--red)'); return; }
   if (tool==='arrows'){ arrows.pop(); }
@@ -2114,29 +1970,6 @@ btnClear.addEventListener('click',()=>{
   if (window.db && !window.isAuthorized) { showStatus('No autorizado para borrar dibujos.', 'var(--red)'); return; }
   arrows=[]; strokes=[]; notes=[]; renderDraw(); // NUEVO: LIMPIAR NOTAS
 });
-
-// Eventos de botones de control móvil (ahora llaman a las funciones principales)
-// Usamos setTool para cambiar el modo
-if (toolArrowsMobile) toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); });
-if (toolPenMobile) toolPenMobile.addEventListener('click',()=>{ setTool('pen'); });
-if (toolTextMobile) toolTextMobile.addEventListener('click',()=>{ setTool('text'); });
-
-// Mapeo de acciones (botones duplicados en móvil)
-if (document.getElementById('btnUndoMobile')) document.getElementById('btnUndoMobile').addEventListener('click', () => { btnUndo.click(); });
-if (document.getElementById('btnClearMobile')) document.getElementById('btnClearMobile').addEventListener('click', () => { btnClear.click(); });
-if (document.getElementById('btnLoadPlayMobile')) document.getElementById('btnLoadPlayMobile').addEventListener('click', () => { btnLoadPlay.click(); });
-if (document.getElementById('btnDeleteMobile')) document.getElementById('btnDeleteMobile').addEventListener('click', () => { btnDelete.click(); });
-if (document.getElementById('btnRecordMobile')) document.getElementById('btnRecordMobile').addEventListener('click', () => { btnRecord.click(); });
-if (document.getElementById('btnPlayMobile')) document.getElementById('btnPlayMobile').addEventListener('click', () => { btnPlay.click(); });
-if (document.getElementById('btnPauseMobile')) document.getElementById('btnPauseMobile').addEventListener('click', () => { btnPause.click(); });
-if (document.getElementById('btnStopMobile')) document.getElementById('btnStopMobile').addEventListener('click', () => { btnStop.click(); });
-if (document.getElementById('btnClrTlMobile')) document.getElementById('btnClrTlMobile').addEventListener('click', () => { btnClrTl.click(); });
-// Mapeo de entradas de texto
-if (document.getElementById('playNameMobile')) document.getElementById('playNameMobile').addEventListener('input', (e) => { playName.value = e.target.value; });
-if (document.getElementById('playListMobile')) document.getElementById('playListMobile').addEventListener('change', (e) => { playList.value = e.target.value; playName.value = e.target.options[e.target.selectedIndex].textContent; });
-// Sincronización del Scrubber (mobile a desktop)
-if (document.getElementById('scrubberMobile')) document.getElementById('scrubberMobile').addEventListener('input', (e) => { scrubber.value = e.target.value; gotoFrame(parseInt(e.target.value, 10)); });
-
 
 /* ---------- Timeline (Copia de la original) ---------- */
 const TLKEY='rb-timeline'; // Ya no se usa local storage
@@ -2161,7 +1994,7 @@ btnRecord.addEventListener('click',recordFrame);
 
 function updateScrub(){
   // Actualizar los scrubbers de desktop y mobile
-  [scrubber, scrubberMobile, document.getElementById('scrubberMobileFull')].forEach(s => { // AÑADIDO scrubberMobileFull
+  [scrubber].forEach(s => {
     if (!s) return; // FIX: Null check
     s.max = Math.max(0, timeline.length - 1);
     const v = parseInt(s.value, 10) || 0;
@@ -2174,8 +2007,6 @@ function updateScrub(){
   const label = `${currentFrame}/${maxFrame}`;
   
   scrubLbl.textContent = label;
-  if(scrubLblMobile) scrubLblMobile.textContent = label; // FIX: Null check
-  if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent = label; // NUEVO: Check de null
 }
 scrubber.addEventListener('input',()=>{ gotoFrame(parseInt(scrubber.value,10)); });
 
@@ -2184,11 +2015,9 @@ function gotoFrame(i){
   i=Math.max(0,Math.min(timeline.length-1,i));
   stopPlayback();
   
-  // Sincronizar el valor del scrubber en todos los elementos (desktop/mobile/full)
-  [scrubber, scrubberMobile, document.getElementById('scrubberMobileFull')].forEach(s => { if(s) s.value = i; }); 
+  // Sincronizar el valor del scrubber en desktop
+  [scrubber].forEach(s => { if(s) s.value = i; }); // FIX: Null check
   scrubLbl.textContent=`${i}/${timeline.length-1}`;
-  if(scrubLblMobile) scrubLblMobile.textContent=`${i}/${timeline.length-1}`; 
-  if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent=`${i}/${timeline.length-1}`; 
   
   const f=timeline[i];
   f.players.forEach(p=>{
@@ -2201,14 +2030,8 @@ function gotoFrame(i){
 
 // Mapeo de eventos de control de reproducción
 btnPlay.addEventListener('click',playTimeline);
-if (btnPlayMobile) btnPlayMobile.addEventListener('click',playTimeline);
-if (document.getElementById('btnPlayMobileFull')) document.getElementById('btnPlayMobileFull').addEventListener('click', playTimeline); // NUEVO
 btnPause.addEventListener('click',()=>{ paused=true; });
-if (btnPauseMobile) btnPauseMobile.addEventListener('click',()=>{ paused=true; });
-if (document.getElementById('btnPauseMobileFull')) document.getElementById('btnPauseMobileFull').addEventListener('click', ()=>{ paused=true; }); // NUEVO
 btnStop.addEventListener('click',stopPlayback);
-if (btnStopMobile) btnStopMobile.addEventListener('click',stopPlayback);
-if (document.getElementById('btnStopMobileFull')) document.getElementById('btnStopMobileFull').addEventListener('click', stopPlayback); // NUEVO
 btnClrTl.addEventListener('click',()=>{ 
     if (window.db && !window.isAuthorized) { showStatus('No autorizado para limpiar la animación.', 'var(--red)'); return; }
     timeline=[]; updateScrub(); stopPlayback(); 
@@ -2234,13 +2057,9 @@ function animate(now){
   if (u>=1){
     playIdx++;
     
-    // Actualizar labels de scrubbers (Desktop/Mobile)
+    // Actualizar labels de scrubbers (Desktop)
     scrubber.value = playIdx;
-    if(scrubberMobile) scrubberMobile.value = playIdx; // FIX: Null check
-    if(document.getElementById('scrubberMobileFull')) document.getElementById('scrubberMobileFull').value = playIdx; // NUEVO: Check de null
     scrubLbl.textContent=`${playIdx}/${timeline.length-1}`;
-    if(scrubLblMobile) scrubLblMobile.textContent=`${playIdx}/${timeline.length-1}`; // FIX: Null check
-    if(document.getElementById('scrubLblMobileFull')) document.getElementById('scrubLblMobileFull').textContent=`${playIdx}/${timeline.length-1}`; // NUEVO: Check de null
 
     if (playIdx>=timeline.length-1){ playing=false; cancelAnimationFrame(rafId); rafId=null; return; }
     fromF=timeline[playIdx]; toF=timeline[playIdx+1]; segStart=performance.now();
@@ -2251,15 +2070,11 @@ function animate(now){
 function playTimeline(){
   if (timeline.length<2){ showStatus('Necesitás al menos 2 pasos grabados para animar.', 'var(--warn)'); return; }
   
-  // Usar la velocidad del control visible (desktop o móvil completo)
+  // Usar la velocidad del control visible (desktop)
   const speedEl = document.getElementById('speed');
-  const speedMobileFullEl = document.getElementById('speedMobileFull');
-  
   let speedVal = 800; // Default
-  if (window.innerWidth >= 1000 && speedEl) {
+  if (speedEl) {
       speedVal = parseInt(speedEl.value || 800, 10);
-  } else if (window.innerWidth < 1000 && speedMobileFullEl) {
-       speedVal = parseInt(speedMobileFullEl.value || 800, 10);
   }
   
   segDur=Math.max(100, speedVal);
@@ -2310,7 +2125,7 @@ function drawPlayer(ctx,p){
   
   // Dibujar el número (texto)
   ctx.fillStyle='#fff'; 
-  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif'; 
+  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial'; 
   ctx.textAlign='center'; 
   ctx.textBaseline='middle'; 
   ctx.fillText(p.number,p.x,p.y);
@@ -2346,7 +2161,7 @@ function drawArrowC(ctx,a){
 function drawNoteC(ctx, n) {
     ctx.save();
     ctx.fillStyle = n.color || '#ffffff';
-    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif';
+    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -2501,9 +2316,6 @@ btnReset.addEventListener('click',()=>{
       team1: { name: 'Equipo Azul', colorClass: 'team-1', hexColor: '#2f80ff' }, 
       team2: { name: 'Equipo Rojo', colorClass: 'team-2', hexColor: '#ff5a6b' }  
   };
-  // COMENTADO: Ya no se actualizan los campos de entrada de nombres.
-  // team1Name.value = teamConfig.team1.name;
-  // team2Name.value = teamConfig.team2.name;
   
   createPlayers(); 
   placeBall(); 
@@ -2627,16 +2439,46 @@ btnGeminiAnalyze.addEventListener('click', async () => {
 });
 
 
+/* -------------------------- LÓGICA DE MENÚ MÓVIL -------------------------- */
+
+// Función para abrir el menú de hamburguesa
+function openMobileMenu() {
+    if (desktopSidepanel) desktopSidepanel.classList.add('open');
+    if (menuOverlay) menuOverlay.classList.add('open');
+}
+
+// Función para cerrar el menú de hamburguesa
+function closeMobileMenu() {
+    if (desktopSidepanel) desktopSidepanel.classList.remove('open');
+    if (menuOverlay) menuOverlay.classList.remove('open');
+}
+
+// Eventos de Hamburguesa
+if (btnMenuOpen) btnMenuOpen.addEventListener('click', openMobileMenu);
+if (btnCloseMenu) btnCloseMenu.addEventListener('click', closeMobileMenu);
+if (menuOverlay) menuOverlay.addEventListener('click', closeMobileMenu); // Cerrar al hacer tap en el overlay
+
+// Inicialización de herramientas de menú para que cierren al usarse
+if (toolArrows) toolArrows.addEventListener('click', closeMobileMenu);
+if (toolPen) toolPen.addEventListener('click', closeMobileMenu);
+if (toolText) toolText.addEventListener('click', closeMobileMenu);
+
+// Asegurar que el cambio de orientación cierre el menú
+if (document.getElementById('btnLandscapeMobile')) document.getElementById('btnLandscapeMobile').addEventListener('click', closeMobileMenu);
+if (document.getElementById('btnPortraitMobile')) document.getElementById('btnPortraitMobile').addEventListener('click', closeMobileMenu);
+
+// Clonar los eventos del Timeline (Play/Pause) para que cierren el menú si es necesario.
+if (btnPlay) btnPlay.addEventListener('click', closeMobileMenu);
+if (btnPause) btnPause.addEventListener('click', closeMobileMenu);
+if (btnStop) btnStop.addEventListener('click', closeMobileMenu);
+
+
 /* ---------- Inicialización de la Lógica del Tablero ---------- */
 window.initBoardApp = function initBoardApp(){
   // players & ball
   createPlayers();
   placeBall();
   
-  // COMENTADO: Ya no se inicializan los campos de nombre de equipo.
-  // team1Name.value = teamConfig.team1.name;
-  // team2Name.value = teamConfig.team2.name;
-
   // Si no hay timeline, crea un frame inicial
   if (!timeline.length) { recordFrame(); }
   updateScrub();
@@ -2650,8 +2492,6 @@ window.initBoardApp = function initBoardApp(){
   // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
   if (window.auth) {
       // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
-      // NOTA: Si Auth está vivo, onAuthStateChanged ya maneja el estado
-      // No necesitamos lógica aquí, solo asegurar que el botón es visible.
       updateAuthButton(window.auth.currentUser); // Pasa el objeto user para determinar el estado
       
       // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
@@ -2678,104 +2518,6 @@ window.initBoardApp = function initBoardApp(){
   // cuando el DOM no está completamente renderizado en navegadores locales.
   setTimeout(fitBoard, 50); 
 }
-
-/* -------------------------------------------------------------------------- */
-/* -------------------------- LÓGICA DE MENÚ MÓVIL -------------------------- */
-/* -------------------------------------------------------------------------- */
-
-// Función para copiar el contenido del sidepanel al modal móvil
-function transferSidepanelContent() {
-    const desktopPanel = document.getElementById('desktopSidepanel');
-    const mobileContainer = document.getElementById('mobileMenuContent');
-    const timelineControlsFull = document.getElementById('mobileTimelineControlsFull');
-
-    // Mover el contenido del sidepanel (Desktop) al modal de hamburguesa
-    if (desktopPanel && mobileContainer) {
-        
-        // Mantener solo el primer div (el de orientación) en el contenedor móvil
-        const orientationDiv = mobileContainer.querySelector('div:first-child');
-        mobileContainer.innerHTML = '';
-        if (orientationDiv) {
-            mobileContainer.appendChild(orientationDiv);
-        }
-
-        // Secciones a mover/clonar
-        const sections = [
-            document.getElementById('geminiAssistantSection'),
-            document.getElementById('drawingControlsSection'),
-            document.getElementById('playManagementSection'),
-            document.getElementById('timelineSection')
-        ];
-        
-        // Mover/Clonar cada sección al contenedor móvil
-        sections.forEach(section => {
-            if (section) {
-                const clone = section.cloneNode(true);
-                // Renombrar IDs para evitar duplicados, aunque el código usa los originales.
-                // Es un paso de seguridad para evitar conflictos con listeners.
-                
-                // Mover los controles de animación de la sección timeline al final del modal
-                if (section.id === 'timelineSection' && timelineControlsFull) {
-                    // Mover solo los controles de edición de animación al final de la lista del modal
-                    mobileContainer.appendChild(clone);
-                } else if (section.id === 'timelineSection' && !timelineControlsFull) {
-                    // Si el modal completo de reproducción no existe, movemos la sección normal.
-                    mobileContainer.appendChild(clone);
-                } else {
-                    mobileContainer.appendChild(clone);
-                }
-            }
-        });
-        
-        // El contenido del sidepanel ha sido transferido, ahora mapeamos eventos
-        mapMobileMenuEvents();
-    }
-}
-
-// Mapeo de eventos para los botones del menú clonado
-function mapMobileMenuEvents() {
-    // Mapeo de Acciones de Dibujo (tool buttons)
-    if (toolArrowsMobile) toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); mobileMenuModal.classList.remove('open'); });
-    if (toolPenMobile) toolPenMobile.addEventListener('click',()=>{ setTool('pen'); mobileMenuModal.classList.remove('open'); });
-    if (toolTextMobile) toolTextMobile.addEventListener('click',()=>{ setTool('text'); mobileMenuModal.classList.remove('open'); });
-    
-    // Mapeo de Gestión de Jugadas
-    const btnSavePlayClone = document.getElementById('btnSavePlay');
-    if (btnSavePlayClone) btnSavePlayClone.addEventListener('click', () => { 
-        btnSavePlay.click(); 
-        mobileMenuModal.classList.remove('open');
-    });
-
-    // Mapeo de Análisis
-    const btnGeminiAnalyzeClone = document.getElementById('btnGeminiAnalyze');
-    if (btnGeminiAnalyzeClone) btnGeminiAnalyzeClone.addEventListener('click', () => {
-        // La lógica de análisis ya está mapeada al botón original, solo cerramos el modal
-        mobileMenuModal.classList.remove('open');
-    });
-
-    // Mapeo de Controles de Reproducción Full (clonados)
-    if (document.getElementById('btnPlayMobileFull')) document.getElementById('btnPlayMobileFull').addEventListener('click', () => { playTimeline(); mobileMenuModal.classList.remove('open'); });
-    if (document.getElementById('btnPauseMobileFull')) document.getElementById('btnPauseMobileFull').addEventListener('click', () => { paused = true; });
-    if (document.getElementById('btnStopMobileFull')) document.getElementById('btnStopMobileFull').addEventListener('click', stopPlayback);
-    if (document.getElementById('scrubberMobileFull')) document.getElementById('scrubberMobileFull').addEventListener('input', (e) => { 
-        scrubber.value = e.target.value; 
-        gotoFrame(parseInt(e.target.value, 10)); 
-    });
-}
-
-
-// Eventos de Hamburguesa
-if (btnMobileMenu) btnMobileMenu.addEventListener('click', () => {
-    transferSidepanelContent(); // Transferir contenido antes de abrir
-    mobileMenuModal.classList.add('open');
-});
-if (btnCloseMenu) btnCloseMenu.addEventListener('click', () => {
-    mobileMenuModal.classList.remove('open');
-});
-
-// Inicializar la transferencia de contenido
-window.addEventListener('DOMContentLoaded', transferSidepanelContent);
-
 </script>
 </body>
 </html>
