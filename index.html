@@ -655,7 +655,8 @@ window.initFirebaseAndApp();
           <h3 style="font-weight:700; font-size:1.1rem; color:var(--accent);">Gestión de Jugadas</h3>
           <div class="field grow">
             <label class="subtle">Nombre de Jugada (ID en DB)</label>
-            <input type="text" id="playName" placeholder="Ej: Lineout 8" class="grow" disabled/>
+            <!-- FIX: Se quita el 'disabled' inicial para que la función setControlsDisabled lo maneje -->
+            <input type="text" id="playName" placeholder="Ej: Lineout 8" class="grow"/>
           </div>
           <div class="row">
             <button class="btn" id="btnDuplicate" disabled>Duplicar (Local)</button>
