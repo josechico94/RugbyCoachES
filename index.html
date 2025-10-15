@@ -2165,7 +2165,327 @@ btnReset.addEventListener('click', () => {
     resetBoard();
 });
 
-// El resto del código de Exportación y Auxiliares permanece igual.
+
+/* -------------------------------------------------------------------------- */
+/* ------------------------ FUNCIONES DE EXPORTACIÓN ------------------------ */
+/* -------------------------------------------------------------------------- */
+
+// --- Renderizado de un frame en Canvas 2D (Base para todas las exportaciones) ---
+function drawPitch(ctx, W, H){
+  ctx.fillStyle='#137a46'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=6; ctx.strokeRect(5,5,W-10,H-10);
+  ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(0,0,W * 80/1200,H); ctx.fillRect(W * 1120/1200,0,W * 80/1200,H);
+  
+  // Helper para dibujar líneas verticales
+  const v=(x,w=4,d=null)=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(W * x/1200, 0); ctx.lineTo(W * x/1200, H); ctx.lineWidth=w * W/1200; ctx.stroke(); ctx.restore(); };
+  // Helper para dibujar líneas horizontales
+  const h=(y,w=2,d=[4,8])=>{ ctx.save(); ctx.beginPath(); if(d)ctx.setLineDash(d); ctx.moveTo(5, W * y/1200); ctx.lineTo(W-5, W * y/1200); ctx.lineWidth=w * W/1200; ctx.stroke(); ctx.restore(); };
+  
+  // Dibujo de líneas principales
+  v(80,4); v(1120,4); v(309,3); v(891,3); v(500,2,[8,10]); v(697,2,[8,10]); v(600,4);
+  h(50); h(150); h(550); h(650); v(130,2,[8,10]); v(1070,2,[8,10]);
+}
+
+function drawPlayerC(ctx,p, rotateText=false){
+  const r=20; 
+  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  const teamData = p.team === 'team-1' ? teamConfig.team1 : teamConfig.team2;
+  ctx.fillStyle = teamData.hexColor; 
+  ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
+  
+  ctx.save(); 
+  if (rotateText) {
+      // Aplicar rotación inversa de -90 grados para mantener el texto horizontal
+      ctx.translate(p.x, p.y);
+      ctx.rotate(-Math.PI / 2); 
+      ctx.translate(-p.x, -p.y);
+  }
+  
+  ctx.fillStyle='#fff'; 
+  ctx.font='700 14px Inter,system-ui,Segoe UI,Roboto,Arial'; 
+  ctx.textAlign='center'; 
+  ctx.textBaseline='middle'; 
+  ctx.fillText(p.number,p.x,p.y);
+  
+  ctx.restore();
+}
+
+function drawBallC(ctx,b){
+  ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(-15*Math.PI/180);
+  ctx.beginPath(); ctx.ellipse(0,0,25,15,0,0,Math.PI*2); ctx.fillStyle='#ffd400'; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke();
+  ctx.setLineDash([4,6]); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(0,0,15,9,0,0,Math.PI*2); ctx.stroke(); ctx.restore();
+}
+
+function drawStrokeC(ctx,s){
+  const pts=s.points.map(pt=>pt.split(',').map(Number)); if (pts.length<2) return;
+  ctx.save(); if (s.dashed) ctx.setLineDash([8,8]); 
+  ctx.lineWidth=s.width||5; ctx.strokeStyle=s.color||'#ffd400';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); 
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); 
+  ctx.stroke(); ctx.restore();
+}
+
+// CORRECCIÓN: Lógica de flecha reescrita para dibujar la punta correctamente en Canvas 2D
+function drawArrowC(ctx,a){
+  ctx.save(); 
+  
+  // Dibujar el cuerpo de la línea
+  if(a.dashed) ctx.setLineDash([8,8]); 
+  ctx.lineWidth=a.width||5; 
+  ctx.strokeStyle=a.color||'#ffd400';
+  ctx.lineCap = 'round';
+  ctx.beginPath(); 
+  ctx.moveTo(a.x1,a.y1); 
+  ctx.lineTo(a.x2,a.y2); 
+  ctx.stroke();
+
+  // Dibujar la punta de la flecha (como un polígono relleno)
+  ctx.fillStyle=a.color||'#ffd400';
+  const angle = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+  const headLength = 15; // Largo de la punta
+  const headWidth = 10;  // Ancho de la punta
+
+  ctx.beginPath();
+  ctx.moveTo(a.x2, a.y2); // Punto final
+  ctx.lineTo(
+    a.x2 - headLength * Math.cos(angle - Math.PI / 7),
+    a.y2 - headLength * Math.sin(angle - Math.PI / 7)
+  );
+  ctx.lineTo(
+    a.x2 - headLength * Math.cos(angle + Math.PI / 7),
+    a.y2 - headLength * Math.sin(angle + Math.PI / 7)
+  );
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+function drawNoteC(ctx, n) {
+    ctx.save();
+    ctx.fillStyle = n.color || '#ffffff';
+    ctx.font = '700 18px Inter,system-ui,Segoe UI,Roboto,Arial'; 
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.text, n.x, n.y);
+    ctx.restore();
+}
+
+
+// --- Lógica principal de renderizado a Canvas 2D ---
+function renderFrameToCanvas(playersArr, ballPos, arrowsArr, strokesArr, notesArr, portraitExport=false){
+  let W = WIDTH, H = HEIGHT;
+  let rotateText = false;
+  
+  // 1. Configurar dimensiones según la orientación
+  if (portraitExport){
+    W = 700; H = 1200; 
+    exportCanvas.width = W; 
+    exportCanvas.height = H;
+    ctx.save();
+    // Rotar todo el contexto 90 grados
+    ctx.translate(W, 0); 
+    ctx.rotate(Math.PI / 2);
+    rotateText = true; // Indica que el texto debe ser rotado inversamente
+  } else {
+    exportCanvas.width = W; 
+    exportCanvas.height = H;
+  }
+  
+  ctx.clearRect(0, 0, W, H);
+  
+  // 2. Dibujar el Campo
+  drawPitch(ctx, WIDTH, HEIGHT); 
+  
+  // 3. Dibujar Dibujos
+  arrowsArr.forEach(a => drawArrowC(ctx, a));
+  strokesArr.forEach(s => drawStrokeC(ctx, s));
+  notesArr.forEach(n => drawNoteC(ctx, n));
+
+  // 4. Dibujar Jugadores y Balón
+  playersArr.forEach(p => drawPlayerC(ctx, p, rotateText));
+  drawBallC(ctx, ballPos);
+
+  // 5. Restaurar estado de Canvas si hubo rotación
+  if (portraitExport) {
+    ctx.restore();
+  }
+}
+
+// --- Captura de Estado Actual para Exportación ---
+function currentPlayers(){ return [...playersLayer.children].map(el=>({team:el.dataset.team, number:+el.dataset.number, x:parseFloat(el.style.left), y:parseFloat(el.style.top)})); }
+function currentBall(){ return {...currentBallPos}; }
+
+// --- Handler Exportación JPG ---
+btnExportJpg.addEventListener('click',()=>{
+  const portraitExport = (layout.mode==='portrait'); // Respeta orientación actual
+  const players = currentPlayers();
+  const ball = currentBall();
+  
+  renderFrameToCanvas(players, ball, arrows, strokes, notes, portraitExport);
+  const url=exportCanvas.toDataURL('image/jpeg',0.95);
+  const a=document.createElement('a');
+  a.href=url; 
+  a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.jpg' : '_horiz.jpg');
+  document.body.appendChild(a); 
+  a.click(); 
+  a.remove();
+  showStatus('Exportando JPG...', 'var(--accent)');
+});
+
+// --- Captura de Frames para Video (WebM y MP4) ---
+async function exportWebMBlob(){
+  if (timeline.length<2){ showStatus('Necesitas al menos 2 frames grabados para crear un video.', 'var(--red)'); throw new Error('No frames'); }
+  
+  const fps = 30; // Frames por segundo
+  const ms = 1000 / fps;
+  const portraitExport = (layout.mode==='portrait');
+  
+  // Aseguramos que el canvas tenga las dimensiones correctas para el stream
+  if (portraitExport) {
+     exportCanvas.width = 700; exportCanvas.height = 1200;
+  } else {
+     exportCanvas.width = 1200; exportCanvas.height = 700;
+  }
+  
+  const stream = exportCanvas.captureStream(fps);
+  const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+  const chunks = []; 
+  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  const done = new Promise(res => rec.onstop = res);
+
+  const segMs = Math.max(100, parseInt(speed.value||800,10));
+  const stepsPerSegment = Math.max(1, Math.round(segMs/ms)); // Pasos de interpolación por segmento
+
+  rec.start();
+  
+  // Función para capturar un frame con un pequeño retraso
+  const captureFrame = async () => new Promise(r => {
+      // Dibujamos el frame actual ANTES de solicitar el timeout
+      renderFrameToCanvas(currentPlayers(), currentBall(), arrows, strokes, notes, portraitExport);
+      setTimeout(r, ms); 
+  });
+
+  // 1. Renderizar el primer frame (para iniciar correctamente)
+  await captureFrame();
+
+  // 2. Iterar por todos los segmentos de la animación
+  for (let i=0; i < timeline.length - 1; i++){
+    const A = timeline[i], B = timeline[i+1];
+    const mapA = new Map(A.players.map(p => [p.team+'#'+p.number,p]));
+    const mapB = new Map(B.players.map(p => [p.team+'#'+p.number,p]));
+    
+    for(let s=0; s < stepsPerSegment; s++){
+      const t = s / stepsPerSegment; // Factor de interpolación (0.0 a 1.0)
+      const playersInterp = [];
+      
+      // Interpolar posiciones de jugadores
+      for(const [key, pa] of mapA.entries()){
+        const pb = mapB.get(key) || pa; // Si el jugador no se movió, usa la posición A
+        const [team, num] = key.split('#');
+        playersInterp.push({team, number: +num, x: lerp(pa.x,pb.x,t), y: lerp(pa.y,pb.y,t)});
+      }
+      
+      // Interpolar posición del balón
+      const ballInterp = { x: lerp(A.ball.x, B.ball.x, t), y: lerp(A.ball.y, B.ball.y, t) };
+      
+      // Renderizar el frame interpolado
+      renderFrameToCanvas(playersInterp, ballInterp, arrows, strokes, notes, portraitExport);
+      await new Promise(r => setTimeout(r, ms)); 
+    }
+  }
+  
+  // 3. Renderizar el último frame
+  renderFrameToCanvas(timeline[timeline.length-1].players, timeline[timeline.length-1].ball, arrows, strokes, notes, portraitExport);
+  await new Promise(r=>setTimeout(r,ms));
+
+  rec.stop(); 
+  await done;
+  return new Blob(chunks, { type: 'video/webm' });
+}
+
+// --- Handler Exportación WebM ---
+btnExportWebm.addEventListener('click', async ()=>{
+  if (timeline.length < 2) { showStatus('¡Graba al menos 2 pasos antes de exportar video!', 'var(--warn)'); return; }
+  showStatus('Exportando WebM... (Esto puede tardar)', 'var(--accent)');
+  try{
+    const blob = await exportWebMBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const portraitExport = (layout.mode==='portrait');
+    a.href = url; 
+    a.download = (playName.value?.trim()||'jugada') + (portraitExport ? '_vert.webm' : '_horiz.webm');
+    document.body.appendChild(a); 
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); showStatus('WebM exportado con éxito.', 'var(--accent2)'); }, 500);
+  }catch(e){ 
+    console.error(e); 
+    showStatus('Error al exportar WebM. Verifica la consola.', 'var(--red)');
+  }
+});
+
+// --- Handler Exportación MP4 (Usa FFmpeg) ---
+let ffmpegInstance = null;
+async function ensureFFmpeg(){
+  if (ffmpegInstance) return ffmpegInstance;
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  // FIX: Usamos la ruta estable para ffmpeg-core.js
+  const ffmpeg=createFFmpeg({ log:false, corePath:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js' }); 
+  await ffmpeg.load();
+  ffmpegInstance={ffmpeg, fetchFile};
+  return ffmpegInstance;
+}
+
+btnExportMp4.addEventListener('click', async ()=>{
+  if (timeline.length < 2) { showStatus('¡Graba al menos 2 pasos antes de exportar video!', 'var(--warn)'); return; }
+  showStatus('Exportando MP4... (Esto tardará más que el WebM)', 'var(--accent)');
+  
+  try{
+    // 1. Generar el archivo WebM de origen
+    const webm = await exportWebMBlob();
+    
+    // 2. Cargar FFmpeg
+    const { ffmpeg, fetchFile } = await ensureFFmpeg();
+    
+    // 3. Escribir el WebM en el sistema de archivos virtual de FFmpeg
+    ffmpeg.FS('writeFile','in.webm',await fetchFile(webm));
+    
+    // 4. Ejecutar la conversión
+    await ffmpeg.run('-i','in.webm','-c:v','libx264','-preset','medium','-crf','23','-pix_fmt','yuv420p','out.mp4');
+    
+    // 5. Leer el MP4 resultante
+    const data=ffmpeg.FS('readFile','out.mp4');
+    const blob=new Blob([data.buffer],{type:'video/mp4'});
+    
+    // 6. Descargar
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const portraitExport=(layout.mode==='portrait');
+    a.href=url; 
+    a.download=(playName.value?.trim()||'jugada') + (portraitExport ? '_vert.mp4' : '_horiz.mp4');
+    document.body.appendChild(a); 
+    a.click();
+    
+    // 7. Limpiar y notificar
+    setTimeout(()=>{ 
+      URL.revokeObjectURL(url); 
+      a.remove(); 
+      try{ ffmpeg.FS('unlink','in.webm'); ffmpeg.FS('unlink','out.mp4'); }catch{} 
+      showStatus('MP4 exportado con éxito.', 'var(--accent2)');
+    }, 500);
+
+  }catch(e){
+    console.error("Error en la exportación a MP4:", e); 
+    showStatus('ERROR: No se pudo convertir a MP4. La conversión es muy lenta o el navegador es incompatible.', 'var(--red)');
+  }
+});
+
+// El resto del código de control de menú permanece igual.
 </script>
 </body>
 </html>
