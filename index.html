@@ -37,9 +37,8 @@ let appInitialized = false; // Bandera para asegurar que initBoardApp solo se ll
 // IMPORTANTE: LISTA DE USUARIOS AUTORIZADOS
 // SOLO TU UID DE ENTRENADOR ESTÁ AQUÍ.
 const AUTHORIZED_USERS_IDS = [
-    'YZyCoUgkMsOtP7gmWe1qdlWmaug1',
-    '9VvUXzzbtjXsQtt6cswccxfXHTr2',// TU UID DE ENTRENADOR
-    // ... el UID correcto se pegará aquí
+    'YZyCoUgkMsOtP7gmWe1qdlWmaug1', // TU UID DE ENTRENADOR
+    '9VvUXzzbtjXsQtt6cswccxfXHTr2' // NUEVO ENTRENADOR AUTORIZADO
 ];
 
 // Ruta de la colección para guardar las jugadas. 
@@ -556,7 +555,7 @@ window.initFirebaseAndApp();
       </div>
 
       <div class="toolbar">
-        <button class="btn" id="btnReset" disabled>Reiniciar</button>
+        <button class="btn" id="btnReset">Reiniciar</button>
         <button class="btn primary" id="btnSavePlay" disabled>Guardar jugada</button>
         <button class="btn" id="btnLoadPlay" disabled>Cargar</button>
         <button class="btn" id="btnExportJpg">JPG</button>
@@ -2097,8 +2096,49 @@ function playTimeline(){
   paused=false; playing=true; segStart=performance.now();
   if (!rafId) rafId=requestAnimationFrame(animate);
 }
+
+// Lógica de reinicio total
+function resetBoard() {
+  if (!confirm('¿Estás seguro de reiniciar el tablero? Se borrarán todos los movimientos, dibujos y frames actuales.')) return;
+    
+  // 1) Detener animación en curso
+  stopPlayback();
+
+  // 2) Limpiar dibujos/notas (vacía los arrays)
+  arrows.length = 0;
+  strokes.length = 0;
+  notes.length = 0;
+  renderDraw(); // Redibuja el SVG vacío
+
+  // 3) Reposicionar jugadores y balón
+  createPlayers();  // reconstruye jugadores desde initialPositions
+  placeBall(WIDTH/2, HEIGHT/2); // balón al centro
+  clearPlayerSelection();
+
+  // 4) Reset de timeline
+  timeline.length = 0;
+  recordFrame();         // crea frame inicial
+  updateScrub();         // refresca UI de timeline
+  gotoFrame(0);
+
+  // 5) UI
+  playName.value = '';
+  showStatus('Tablero reiniciado.', 'var(--accent2)');
+}
+
+// === Botón Reiniciar Listener (CORREGIDO) ===
+btnReset.addEventListener('click', () => {
+    // 1. Verificar la autorización antes de preguntar al usuario
+    if (window.db && !window.isAuthorized) {
+        showStatus('No autorizado para reiniciar.', 'var(--red)');
+        return;
+    }
+    
+    // 2. Ejecutar el reset (con la confirmación dentro de la función)
+    resetBoard();
+});
+
 // El resto del código de Exportación y Auxiliares permanece igual.
 </script>
 </body>
 </html>
-
