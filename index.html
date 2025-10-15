@@ -108,6 +108,65 @@ function handleAuthStateChange(user) {
     }
 }
 
+
+// **************** CORRECCIÓN 2: MOVER DEFINICIÓN ****************
+// Se mueve la definición de la función principal hacia arriba para evitar errores
+// de referencia cuando es llamada en el catch de initFirebaseAndApp.
+
+/* ---------- Inicialización de la Lógica del Tablero ---------- */
+window.initBoardApp = function initBoardApp(){
+  // players & ball
+  createPlayers();
+  placeBall();
+  
+  // COMENTADO: Ya no se inicializan los campos de nombre de equipo.
+  // team1Name.value = teamConfig.team1.name;
+  // team2Name.value = teamConfig.team2.name;
+
+  // Si no hay timeline, crea un frame inicial
+  if (!timeline.length) { recordFrame(); }
+  updateScrub();
+
+  // Inicia la suscripción a Firestore para la lista de jugadas
+  refreshPlayList(); // Llama a la función unificada que maneja el fallback
+  
+  // Aplica las restricciones de permisos
+  setControlsDisabled(!window.isAuthorized);
+
+  // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
+  if (window.auth) {
+      // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
+      // NOTA: Si Auth está vivo, onAuthStateChanged ya maneja el estado
+      // No necesitamos lógica aquí, solo asegurar que el botón es visible.
+      updateAuthButton(window.auth.currentUser); // Pasa el objeto user para determinar el estado
+      
+      // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
+      btnAuthAction.style.display = 'inline-block'; 
+  } else {
+      // Si Firebase falló (modo local), ocultamos el botón de Auth (no hay cloud para iniciar sesión)
+      btnAuthAction.style.display = 'none';
+  }
+  
+  // eventos de drag para el balón
+  enableDragBall(()=>{ if (autoRec.checked) recordFrame(); });
+  
+  // Nuevo: Habilitar la selección masiva con recuadro
+  enableSelectionBox();
+
+  // eventos UI
+  document.getElementById('showGrid').checked=false; renderGrid();
+  document.getElementById('snap').checked=false;
+  
+  // Render inicial y layout
+  renderDraw();
+  fitBoard(); 
+  // FIX: Se añade un pequeño timeout para forzar el cálculo correcto del layout
+  // cuando el DOM no está completamente renderizado en navegadores locales.
+  setTimeout(fitBoard, 50); 
+}
+/* ----------------------------------------------------------- */
+
+
 // Función de inicialización asíncrona
 async function initFirebaseAndApp() {
     try {
@@ -131,7 +190,7 @@ async function initFirebaseAndApp() {
         // 2. LÓGICA NO-BLOQUEANTE: Inicializar el Canvas inmediatamente
         if (!appInitialized) {
             appInitialized = true;
-            window.initBoardApp(); // LLAMADA NO-BLOQUEANTE
+            window.initBoardApp(); // LLAMADA NO-BLOQUEANTE (Ahora definida)
         }
         
         // 3. Listener de cambio de estado de autenticación (ASÍNCRONO)
@@ -471,12 +530,17 @@ initFirebaseAndApp();
               <select id="strokeColor" disabled>
                 <option value="#ffffff">Blanco</option>
                 <option value="#35d07f">Verde</option>
+                <option value="#2f80ff">Azul</option>
+                <option value="#ff5a6b">Rojo</option>
+                <option value="#ffd400" selected>Amarillo</option>
               </select>
             </div>
             <div class="field">
               <label>Grosor</label>
               <select id="strokeWidth" disabled>
                 <option value="3">Fino</option>
+                <option value="5" selected>Medio</option>
+                <option value="7">Grueso</option>
               </select>
             </div>
             <div class="field">
@@ -520,7 +584,7 @@ initFirebaseAndApp();
           <div class="row">
             <button class="btn" id="btnDuplicate" disabled>Duplicar (Local)</button>
             <select id="playList" class="btn grow" disabled>
-              <option value="">Inicia sesión para cargar jugadas</option>
+              <option value="">Modo Lector: Cargando jugadas...</option>
             </select>
             <button class="btn" id="btnDelete" disabled>Eliminar</button>
           </div>
@@ -601,12 +665,18 @@ initFirebaseAndApp();
             <label>Color</label>
             <select id="strokeColorMobile" disabled>
               <option value="#ffffff">Blanco</option>
+              <option value="#35d07f">Verde</option>
+              <option value="#2f80ff">Azul</option>
+              <option value="#ff5a6b">Rojo</option>
+              <option value="#ffd400" selected>Amarillo</option>
             </select>
           </div>
           <div class="field">
             <label>Grosor</label>
             <select id="strokeWidthMobile" disabled>
               <option value="3">Fino</option>
+              <option value="5" selected>Medio</option>
+              <option value="7">Grueso</option>
             </select>
           </div>
           <button class="btn" id="btnUndoMobile" disabled>Deshacer</button>
@@ -625,7 +695,7 @@ initFirebaseAndApp();
           </div>
           <div class="row">
             <select id="playListMobile" class="btn grow" disabled>
-              <option value="">Inicia sesión para cargar jugadas</option>
+              <option value="">Modo Lector: Cargando jugadas...</option>
             </select>
             <button class="btn" id="btnLoadPlayMobile" disabled>Cargar</button>
             <button class="btn" id="btnDeleteMobile" disabled>Eliminar</button>
@@ -785,6 +855,8 @@ function setControlsDisabled(disabled) {
 
     // SIEMPRE HABILITAR CARGAR, PLAY Y LISTAS para MODO ESPECTADOR (disabled=false)
     [btnLoadPlay, btnLoadPlayMobile, playList, playListMobile, btnPlay, btnPause, btnStop, scrubber, scrubberMobile].forEach(el => el.disabled = false);
+    // Habilitar botón de Reset sólo para Entrenadores
+    btnReset.disabled = !window.isAuthorized;
 }
 
 
@@ -1066,18 +1138,18 @@ playList.addEventListener('change', () => {
 });
 
 // Eventos para Mobile (Sincronización)
-playNameMobile.addEventListener('input', () => { playName.value = playNameMobile.value; });
-btnLoadPlayMobile.addEventListener('click', () => { 
+if (playNameMobile) playNameMobile.addEventListener('input', () => { playName.value = playNameMobile.value; });
+if (btnLoadPlayMobile) btnLoadPlayMobile.addEventListener('click', () => { 
     if (!playListMobile.value) { showStatus('Elegí una jugada del selector.', 'var(--warn)'); return; }
     loadPlay(playListMobile.value);
 });
-playListMobile.addEventListener('change', () => {
+if (playListMobile) playListMobile.addEventListener('change', () => {
     selectedOption = playListMobile.options[playListMobile.selectedIndex];
     playName.value = selectedOption.textContent;
     playNameMobile.value = selectedOption.textContent;
     playList.value = selectedOption.value;
 });
-btnDeleteMobile.addEventListener('click', async () => {
+if (btnDeleteMobile) btnDeleteMobile.addEventListener('click', async () => {
     const playId = playListMobile.value; 
     if (!playId) { showStatus('Elegí una jugada para eliminar.', 'var(--warn)'); return; }
     if (!confirm(`¿Estás seguro de eliminar la jugada "${playListMobile.options[playListMobile.selectedIndex].textContent}"?`)) return;
@@ -1742,12 +1814,12 @@ const setTool = (newTool, targetButton) => {
     }
 };
 
-toolArrows.addEventListener('click',()=>{ setTool('arrows'); });
-toolPen.addEventListener('click',()=>{ setTool('pen'); });
-toolText.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO
-toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); });
-toolPenMobile.addEventListener('click',()=>{ setTool('pen'); });
-toolTextMobile.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO MOVIL
+if (toolArrows) toolArrows.addEventListener('click',()=>{ setTool('arrows'); });
+if (toolPen) toolPen.addEventListener('click',()=>{ setTool('pen'); });
+if (toolText) toolText.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO
+if (toolArrowsMobile) toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); });
+if (toolPenMobile) toolPenMobile.addEventListener('click',()=>{ setTool('pen'); });
+if (toolTextMobile) toolTextMobile.addEventListener('click',()=>{ setTool('text'); }); // NUEVO EVENTO MOVIL
 
 let drawingArrow=false, startPt=null, drawingStroke=false, currentStroke=null;
 
@@ -1815,22 +1887,30 @@ function renderDraw(){
 
 // Sincronizar colores y grosor de dibujo (Desktop a Mobile y viceversa)
 function syncDrawingTools(){
+    // Esta función ya no necesita sincronizar el estado, solo asegura que el UI lea del selector visible.
+    // Lo eliminamos para reducir la complejidad.
+}
+if (strokeColor) strokeColor.addEventListener('change', syncDrawingTools);
+if (strokeWidth) strokeWidth.addEventListener('change', syncDrawingTools);
+if (strokeColorMobile) strokeColorMobile.addEventListener('change', syncDrawingTools);
+if (strokeWidthMobile) strokeWidthMobile.addEventListener('change', syncDrawingTools);
+
+// Helper para obtener el valor del control activo (desktop o mobile)
+function getActiveControlValue(desktopId, mobileId) {
+    const desktopEl = document.getElementById(desktopId);
+    const mobileEl = document.getElementById(mobileId);
+    
+    // Si la pantalla es grande, se usa el panel lateral. Si es pequeña, el dock inferior.
     if (window.innerWidth >= 1000) {
-        // Desktop a Mobile
-        strokeColorMobile.value = strokeColor.value;
-        strokeWidthMobile.value = strokeWidth.value;
-        // La activación de tool ya se maneja en setTool()
+        return desktopEl ? desktopEl.value : (desktopEl.checked || false);
     } else {
-        // Mobile a Desktop
-        strokeColor.value = strokeColorMobile.value;
-        strokeWidth.value = strokeWidthMobile.value;
-        // La activación de tool ya se maneja en setTool()
+        // En móvil, algunos controles se usan de forma indirecta, pero usaremos los IDs de móvil si están presentes.
+        return mobileEl ? mobileEl.value : (mobileEl.checked || false);
     }
 }
-strokeColor.addEventListener('change', syncDrawingTools);
-strokeWidth.addEventListener('change', syncDrawingTools);
-strokeColorMobile.addEventListener('change', syncDrawingTools);
-strokeWidthMobile.addEventListener('change', syncDrawingTools);
+function getActiveToolColor() { return getActiveControlValue('strokeColor', 'strokeColorMobile'); }
+function getActiveToolWidth() { return parseInt(getActiveControlValue('strokeWidth', 'strokeWidthMobile'), 10) || 5; }
+function getActiveDashed() { return document.getElementById('dashed') ? document.getElementById('dashed').checked : false; } // Solo hay uno para dashed
 
 board.addEventListener('pointerdown',e=>{
   if (e.target.closest('.player') || e.target.closest('#ball')) return;
@@ -1843,11 +1923,11 @@ board.addEventListener('pointerdown',e=>{
 
   try{board.setPointerCapture(e.pointerId);}catch{}
   let p=clientToBoard(e);
-  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   
   // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
-  const currentStrokeColor = window.innerWidth >= 1000 ? strokeColor.value : strokeColorMobile.value;
-  const currentStrokeWidth = parseInt(window.innerWidth >= 1000 ? strokeWidth.value : strokeWidthMobile.value, 10) || 5;
+  const currentStrokeColor = getActiveToolColor();
+  const currentStrokeWidth = getActiveToolWidth();
 
   if (tool==='arrows'){ 
       drawingArrow=true; 
@@ -1858,7 +1938,7 @@ board.addEventListener('pointerdown',e=>{
         points:[`${p.x},${p.y}`], 
         color:currentStrokeColor, 
         width:currentStrokeWidth, 
-        dashed:!!dashed.checked 
+        dashed:getActiveDashed() 
     };
     strokes.push(currentStroke); renderDraw();
   } else if (tool==='text') {
@@ -1887,7 +1967,7 @@ board.addEventListener('pointermove',e=>{
   if (window.db && !window.isAuthorized) return;
   
   let p=clientToBoard(e);
-  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   const last=currentStroke.points[currentStroke.points.length-1];
   const [lx,ly]=last.split(',').map(Number);
   if (Math.abs(p.x-lx)+Math.abs(p.y-ly) > 0.5){
@@ -1904,11 +1984,11 @@ board.addEventListener('pointerup',e=>{
   if (window.db && !window.isAuthorized) return;
   
   let p=clientToBoard(e);
-  if (snap.checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
+  if (document.getElementById('snap').checked){ p.x=snapVal(p.x); p.y=snapVal(p.y); }
   
   // Usar el valor de color/grosor del selector activo (Desktop o Mobile)
-  const currentStrokeColor = window.innerWidth >= 1000 ? strokeColor.value : strokeColorMobile.value;
-  const currentStrokeWidth = parseInt(window.innerWidth >= 1000 ? strokeWidth.value : strokeWidthMobile.value, 10) || 5;
+  const currentStrokeColor = getActiveToolColor();
+  const currentStrokeWidth = getActiveToolWidth();
 
   if (tool==='arrows' && drawingArrow && startPt){
     arrows.push({ 
@@ -1918,7 +1998,7 @@ board.addEventListener('pointerup',e=>{
         y2:p.y, 
         color:currentStrokeColor, 
         width:currentStrokeWidth, 
-        dashed:!!dashed.checked 
+        dashed:getActiveDashed() 
     });
     drawingArrow=false; startPt=null; renderDraw();
   }else if (tool==='pen' && drawingStroke && currentStroke){
@@ -1934,21 +2014,32 @@ btnUndo.addEventListener('click',()=>{
   else if (tool==='text') { notes.pop(); } // NUEVO: DESHACER TEXTO
   renderDraw();
 });
-btnUndoMobile.addEventListener('click',()=>{
-  if (window.db && !window.isAuthorized) { showStatus('No autorizado para deshacer.', 'var(--red)'); return; }
-  if (tool==='arrows'){ arrows.pop(); }
-  else if (tool==='pen') { strokes.pop(); }
-  else if (tool==='text') { notes.pop(); } // NUEVO: DESHACER TEXTO
-  renderDraw();
-});
 btnClear.addEventListener('click',()=>{ 
   if (window.db && !window.isAuthorized) { showStatus('No autorizado para borrar dibujos.', 'var(--red)'); return; }
   arrows=[]; strokes=[]; notes=[]; renderDraw(); // NUEVO: LIMPIAR NOTAS
 });
-btnClearMobile.addEventListener('click',()=>{ 
-  if (window.db && !window.isAuthorized) { showStatus('No autorizado para borrar dibujos.', 'var(--red)'); return; }
-  arrows=[]; strokes=[]; notes=[]; renderDraw(); // NUEVO: LIMPIAR NOTAS
-});
+
+// Eventos de botones de control móvil (ahora llaman a las funciones principales)
+// Usamos setTool para cambiar el modo
+if (toolArrowsMobile) toolArrowsMobile.addEventListener('click',()=>{ setTool('arrows'); });
+if (toolPenMobile) toolPenMobile.addEventListener('click',()=>{ setTool('pen'); });
+if (toolTextMobile) toolTextMobile.addEventListener('click',()=>{ setTool('text'); });
+
+// Mapeo de acciones (botones duplicados en móvil)
+if (document.getElementById('btnUndoMobile')) document.getElementById('btnUndoMobile').addEventListener('click', () => { btnUndo.click(); });
+if (document.getElementById('btnClearMobile')) document.getElementById('btnClearMobile').addEventListener('click', () => { btnClear.click(); });
+if (document.getElementById('btnLoadPlayMobile')) document.getElementById('btnLoadPlayMobile').addEventListener('click', () => { btnLoadPlay.click(); });
+if (document.getElementById('btnDeleteMobile')) document.getElementById('btnDeleteMobile').addEventListener('click', () => { btnDelete.click(); });
+if (document.getElementById('btnRecordMobile')) document.getElementById('btnRecordMobile').addEventListener('click', () => { btnRecord.click(); });
+if (document.getElementById('btnPlayMobile')) document.getElementById('btnPlayMobile').addEventListener('click', () => { btnPlay.click(); });
+if (document.getElementById('btnPauseMobile')) document.getElementById('btnPauseMobile').addEventListener('click', () => { btnPause.click(); });
+if (document.getElementById('btnStopMobile')) document.getElementById('btnStopMobile').addEventListener('click', () => { btnStop.click(); });
+if (document.getElementById('btnClrTlMobile')) document.getElementById('btnClrTlMobile').addEventListener('click', () => { btnClrTl.click(); });
+// Mapeo de entradas de texto
+if (document.getElementById('playNameMobile')) document.getElementById('playNameMobile').addEventListener('input', (e) => { playName.value = e.target.value; });
+if (document.getElementById('playListMobile')) document.getElementById('playListMobile').addEventListener('change', (e) => { playList.value = e.target.value; playName.value = e.target.options[e.target.selectedIndex].textContent; });
+// Sincronización del Scrubber (mobile a desktop)
+if (document.getElementById('scrubberMobile')) document.getElementById('scrubberMobile').addEventListener('input', (e) => { scrubber.value = e.target.value; gotoFrame(parseInt(e.target.value, 10)); });
 
 
 /* ---------- Timeline (Copia de la original) ---------- */
@@ -1970,7 +2061,6 @@ function recordFrame(){
 }
 // Mapeo de eventos de grabación
 btnRecord.addEventListener('click',recordFrame);
-btnRecordMobile.addEventListener('click',recordFrame);
 
 
 function updateScrub(){
@@ -1990,7 +2080,6 @@ function updateScrub(){
   scrubLblMobile.textContent = label;
 }
 scrubber.addEventListener('input',()=>{ gotoFrame(parseInt(scrubber.value,10)); });
-scrubberMobile.addEventListener('input',()=>{ gotoFrame(parseInt(scrubberMobile.value,10)); });
 
 function gotoFrame(i){
   if (!timeline.length) return;
@@ -2013,11 +2102,8 @@ function gotoFrame(i){
 
 // Mapeo de eventos de control de reproducción
 btnPlay.addEventListener('click',playTimeline);
-btnPlayMobile.addEventListener('click',playTimeline);
 btnPause.addEventListener('click',()=>{ paused=true; });
-btnPauseMobile.addEventListener('click',()=>{ paused=true; });
 btnStop.addEventListener('click',stopPlayback);
-btnStopMobile.addEventListener('click',stopPlayback);
 btnClrTl.addEventListener('click',()=>{ 
     if (window.db && !window.isAuthorized) { showStatus('No autorizado para limpiar la animación.', 'var(--red)'); return; }
     timeline=[]; updateScrub(); stopPlayback(); 
@@ -2444,8 +2530,9 @@ window.initBoardApp = function initBoardApp(){
   // FIX CRÍTICO: Solo intenta actualizar el estado de autenticación si Firebase Auth está inicializado.
   if (window.auth) {
       // Verificamos si hay un usuario logueado (no nulo) y si no es anónimo
-      const isUserLoggedIn = window.auth.currentUser ? !window.auth.currentUser.isAnonymous : false;
-      updateAuthButton(isUserLoggedIn);
+      // NOTA: Si Auth está vivo, onAuthStateChanged ya maneja el estado
+      // No necesitamos lógica aquí, solo asegurar que el botón es visible.
+      updateAuthButton(window.auth.currentUser); // Pasa el objeto user para determinar el estado
       
       // FIX: Asegurar que el botón de autenticación esté visible si el Auth está vivo
       btnAuthAction.style.display = 'inline-block'; 
@@ -2461,9 +2548,8 @@ window.initBoardApp = function initBoardApp(){
   enableSelectionBox();
 
   // eventos UI
-  showGrid.checked=false; renderGrid();
-  snap.checked=false;
-  syncDrawingTools(); // Sincroniza los controles de dibujo al inicio
+  document.getElementById('showGrid').checked=false; renderGrid();
+  document.getElementById('snap').checked=false;
   
   // Render inicial y layout
   renderDraw();
