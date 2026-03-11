@@ -1,0 +1,1189 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo - Tutoriales en Video | RugbyBoard Pro</title>
+
+  <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+  <style>
+    body { box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; width: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #f0f6fc;
+      overflow-x: hidden;
+      background: #010409;
+    }
+
+    .landing-wrapper { width: 100%; min-height: 100%; position: relative; }
+    .bg-gradient {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
+                  radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.12) 0%, transparent 50%);
+      pointer-events: none; z-index: 0;
+    }
+    .grid-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none; z-index: 0;
+    }
+    .content-wrapper { position: relative; z-index: 1; }
+
+    /* ============= NAV (igual al home) ============= */
+    nav {
+      width: 100%;
+      padding: 1.5rem 3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(1, 4, 9, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: white;
+    }
+    .nav-menu { display: flex; gap: 2rem; align-items: center; }
+    .nav-link {
+      color: rgba(240, 246, 252, 0.7);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.3s ease;
+      font-size: 0.95rem;
+    }
+    .nav-link:hover { color: #10b981; }
+    .nav-cta {
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+    .nav-cta:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+
+    .lang-switch { display: flex; gap: .5rem; align-items: center; margin-left: 1rem; }
+    .lang-btn {
+      width: 40px; height: 40px; border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+      color: #f0f6fc;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s ease;
+      font-size: 18px; line-height: 1;
+    }
+    .lang-btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(16, 185, 129, 0.45);
+      background: rgba(16, 185, 129, 0.10);
+    }
+    .lang-btn.is-active {
+      border-color: rgba(16, 185, 129, 0.7);
+      background: rgba(16, 185, 129, 0.18);
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.18);
+    }
+
+    /* ============= Mobile menu (igual al home) ============= */
+    .burger-btn {
+      display: none;
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(14px);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      transition: transform .15s ease, border-color .2s ease, background .2s ease;
+    }
+    .burger-btn:hover { transform: translateY(-1px); border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.10); }
+    .burger-icon { position: relative; width: 18px; height: 14px; display: block; }
+    .burger-line {
+      position: absolute; left: 0;
+      width: 100%; height: 2px;
+      background: rgba(240,246,252,0.90);
+      border-radius: 999px;
+      transition: transform .22s ease, top .22s ease, opacity .18s ease;
+    }
+    .burger-line.l1 { top: 0; }
+    .burger-line.l2 { top: 6px; }
+    .burger-line.l3 { top: 12px; }
+    .burger-btn.is-open .burger-line.l1 { top: 6px; transform: rotate(45deg); }
+    .burger-btn.is-open .burger-line.l2 { opacity: 0; }
+    .burger-btn.is-open .burger-line.l3 { top: 6px; transform: rotate(-45deg); }
+
+    .menu-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+      z-index: 90;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .22s ease;
+    }
+    .menu-overlay.is-open { opacity: 1; pointer-events: auto; }
+
+    .mobile-drawer {
+      position: fixed;
+      left: 12px; right: 12px;
+      top: 76px;
+      z-index: 95;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 22px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+      backdrop-filter: blur(26px);
+      transform: translateY(-14px);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform .24s ease, opacity .24s ease;
+    }
+    .mobile-drawer.is-open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+    .mobile-drawer-inner { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .mobile-link {
+      display: flex; align-items: center; justify-content: space-between;
+      text-decoration: none;
+      padding: 14px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      color: rgba(240,246,252,0.92);
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      transition: transform .16s ease, border-color .2s ease, background .2s ease;
+    }
+    .mobile-link:hover { transform: translateY(-1px); border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.10); }
+    .chev { opacity: 0.65; font-size: 12px; }
+    .mobile-cta {
+      width: 100%;
+      padding: 14px 14px;
+      border-radius: 18px;
+      border: none;
+      cursor: pointer;
+      font-weight: 800;
+      color: white;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 10px 26px rgba(16,185,129,0.25);
+      transition: transform .16s ease, box-shadow .2s ease;
+    }
+    .mobile-cta:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(16,185,129,0.30); }
+    .mobile-lang {
+      margin-top: 6px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .mobile-lang .label { font-size: 0.95rem; color: rgba(240,246,252,0.70); font-weight: 650; letter-spacing: -0.01em; }
+    .mobile-lang .lang-switch { margin-left: 0; }
+
+    /* ============= Demo page ============= */
+    .demo-hero {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 4.5rem 3rem 1.5rem;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .5rem 1rem;
+      background: rgba(16,185,129,0.10);
+      border: 1px solid rgba(16,185,129,0.28);
+      border-radius: 999px;
+      color: #10b981;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .badge-dot { width: 8px; height: 8px; border-radius: 999px; background: #10b981; }
+    .demo-title {
+      font-size: 3.2rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin-top: 1.2rem;
+      line-height: 1.1;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .demo-subtitle {
+      margin-top: 1.2rem;
+      color: rgba(240, 246, 252, 0.70);
+      font-size: 1.15rem;
+      max-width: 780px;
+      line-height: 1.75;
+    }
+
+    .controls {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 0 3rem 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .search-wrap {
+      display: flex;
+      gap: .75rem;
+      align-items: center;
+      padding: .9rem 1rem;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(16px);
+    }
+    .search-wrap i { opacity: .75; }
+    .search-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: rgba(240,246,252,0.92);
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .search-input::placeholder { color: rgba(240,246,252,0.45); font-weight: 600; }
+
+    .select {
+      width: 100%;
+      padding: .95rem 1rem;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(240,246,252,0.90);
+      outline: none;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      backdrop-filter: blur(16px);
+      appearance: none;
+    }
+
+    .video-shell {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 0 3rem 5rem;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.2rem;
+    }
+
+    .card {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+      overflow: hidden;
+      transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease, background .22s ease;
+      position: relative;
+    }
+    .card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(16,185,129,0.25);
+      box-shadow: 0 22px 70px rgba(16,185,129,0.10);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .thumb {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(59,130,246,0.18) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      position: relative;
+    }
+    .thumb video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .pill {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: .35rem .7rem;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: rgba(240,246,252,0.95);
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(1,4,9,0.55);
+      backdrop-filter: blur(12px);
+    }
+    .duration {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: .35rem .7rem;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+      color: rgba(240,246,252,0.95);
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(1,4,9,0.55);
+      backdrop-filter: blur(12px);
+    }
+
+    .card-body { padding: 1rem 1.1rem 1.1rem; }
+    .card-title {
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      font-size: 1.05rem;
+      margin-bottom: .35rem;
+      color: rgba(240,246,252,0.96);
+    }
+    .card-text {
+      color: rgba(240,246,252,0.70);
+      font-size: .95rem;
+      line-height: 1.65;
+      margin-bottom: .9rem;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .chip {
+      display: inline-flex;
+      gap: .45rem;
+      align-items: center;
+      padding: .4rem .75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      color: rgba(240,246,252,0.78);
+      font-weight: 800;
+      font-size: .82rem;
+      letter-spacing: -0.01em;
+    }
+    .watch-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      padding: .55rem .85rem;
+      border-radius: 14px;
+      border: 1px solid rgba(16,185,129,0.25);
+      background: rgba(16,185,129,0.10);
+      color: #10b981;
+      font-weight: 900;
+      cursor: pointer;
+      transition: transform .16s ease, background .2s ease, border-color .2s ease;
+      white-space: nowrap;
+    }
+    .watch-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(16,185,129,0.45);
+      background: rgba(16,185,129,0.14);
+    }
+
+    /* ============= Modal video ============= */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      z-index: 120;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .modal-overlay.is-open { opacity: 1; pointer-events: auto; }
+    .modal {
+      width: min(980px, 100%);
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(15,23,42,0.80);
+      backdrop-filter: blur(26px);
+      box-shadow: 0 30px 90px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(1,4,9,0.45);
+    }
+    .modal-title {
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      color: rgba(240,246,252,0.95);
+      font-size: 1rem;
+      display: flex;
+      gap: .6rem;
+      align-items: center;
+    }
+    .close-btn {
+      width: 42px; height: 42px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: rgba(240,246,252,0.90);
+      cursor: pointer;
+      transition: transform .16s ease, border-color .2s ease, background .2s ease;
+    }
+    .close-btn:hover { transform: translateY(-1px); border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.10); }
+
+    .modal-body { padding: 12px; }
+    .modal-body video {
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* ============= Footer (igual al home) ============= */
+    footer {
+      width: 100%;
+      padding: 4rem 3rem 2rem;
+      background: rgba(1, 4, 9, 0.8);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .footer-content { max-width: 1300px; margin: 0 auto; }
+    .footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 3rem; margin-bottom: 3rem; }
+    .footer-brand { display: flex; flex-direction: column; gap: 1rem; }
+    .footer-logo { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .footer-description { color: rgba(240, 246, 252, 0.6); line-height: 1.7; font-size: 0.95rem; }
+    .footer-column h4 { font-size: 1rem; font-weight: 700; margin-bottom: 1.5rem; color: #10b981; }
+    .footer-links { display: flex; flex-direction: column; gap: 0.75rem; }
+    .footer-links a { color: rgba(240, 246, 252, 0.6); text-decoration: none; transition: color 0.3s ease; font-size: 0.95rem; }
+    .footer-links a:hover { color: #10b981; }
+    .footer-bottom {
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .copyright { color: rgba(240, 246, 252, 0.5); font-size: 0.9rem; }
+    .social-links { display: flex; gap: 1rem; }
+    .social-icon {
+      width: 40px; height: 40px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(240, 246, 252, 0.6);
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+    .social-icon:hover {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: #10b981;
+      color: #10b981;
+      transform: translateY(-3px);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .video-shell { grid-template-columns: repeat(2, 1fr); }
+      .controls { grid-template-columns: 1fr; }
+      .footer-top { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 768px) {
+      nav { padding: 1rem 1.25rem; }
+      .nav-menu { display: none; }
+      .burger-btn { display: inline-flex; }
+      .demo-hero { padding: 3.5rem 1.25rem 1.25rem; }
+      .controls { padding: 0 1.25rem 1.25rem; }
+      .video-shell { padding: 0 1.25rem 4rem; grid-template-columns: 1fr; }
+      .demo-title { font-size: 2.3rem; }
+      .footer-top { grid-template-columns: 1fr; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="landing-wrapper">
+    <div class="bg-gradient"></div>
+    <div class="grid-overlay"></div>
+
+    <div class="content-wrapper">
+
+      <!-- NAV -->
+      <nav id="mainNav">
+        <div class="logo">
+          <div class="logo-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+          <span>RugbyBoard Pro</span>
+        </div>
+
+        <div class="nav-menu">
+          <a href="index.html#features" class="nav-link" data-i18n="navFeatures">Características</a>
+          <a href="index.html#pricing" class="nav-link" data-i18n="navPricing">Precios</a>
+          <a href="acercade.html" class="nav-link" data-i18n="navAbout">Acerca de</a>
+          <a href="document.html" class="nav-link" data-i18n="navDocs">Documentación</a>
+          <a href="demo.html" class="nav-link" data-i18n="navDemo">Demo</a>
+          <a href="soporte.html" class="nav-link" data-i18n="navSupport">Soporte</a>
+          <a href="contacto.html" class="nav-link" data-i18n="navContact">Contacto</a>
+
+
+          <a href="https://rugbyboardpro.com/boardpro.html">
+            <button class="nav-cta" data-i18n="navCta">Comenzar Gratis</button>
+          </a>
+
+          <div class="lang-switch" aria-label="Language switcher">
+            <button class="lang-btn" type="button" data-lang="es" aria-label="Español" title="Español">🇪🇸</button>
+            <button class="lang-btn" type="button" data-lang="en" aria-label="English" title="English">🇺🇸</button>
+            <button class="lang-btn" type="button" data-lang="it" aria-label="Italiano" title="Italiano">🇮🇹</button>
+          </div>
+        </div>
+
+        <button class="burger-btn" type="button" id="burgerBtn" aria-label="Open menu" aria-expanded="false">
+          <span class="burger-icon" aria-hidden="true">
+            <span class="burger-line l1"></span>
+            <span class="burger-line l2"></span>
+            <span class="burger-line l3"></span>
+          </span>
+        </button>
+      </nav>
+
+      <div class="menu-overlay" id="menuOverlay" aria-hidden="true"></div>
+
+      <div class="mobile-drawer" id="mobileDrawer" aria-hidden="true">
+        <div class="mobile-drawer-inner">
+          <a href="index.html#features" class="mobile-link" data-i18n="navFeatures">Características <span class="chev">›</span></a>
+          <a href="index.html#pricing" class="mobile-link" data-i18n="navPricing">Precios <span class="chev">›</span></a>
+          <a href="acercade.html" class="mobile-link" data-i18n="navAbout">Acerca de <span class="chev">›</span></a>
+          <a href="document.html" class="mobile-link" data-i18n="navDocs">Documentación <span class="chev">›</span></a>
+          <a href="demo.html" class="mobile-link" data-i18n="navDemo">Demo <span class="chev">›</span></a>
+          <a href="soporte.html" class="mobile-link" data-i18n="navSupport">Soporte <span class="chev">›</span></a>
+          <a href="contacto.html" class="mobile-link" data-i18n="navContact">Contacto <span class="chev">›</span></a>
+
+
+          <a href="https://rugbyboardpro.com/boardpro.html">
+            <button class="mobile-cta" data-i18n="navCta">Comenzar Gratis</button>
+          </a>
+
+          <div class="mobile-lang">
+            <div class="label" data-i18n="navLangLabel">Language</div>
+            <div class="lang-switch" aria-label="Language switcher mobile">
+              <button class="lang-btn" type="button" data-lang="es" aria-label="Español" title="Español">🇪🇸</button>
+              <button class="lang-btn" type="button" data-lang="en" aria-label="English" title="English">🇺🇸</button>
+              <button class="lang-btn" type="button" data-lang="it" aria-label="Italiano" title="Italiano">🇮🇹</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HERO -->
+      <header class="demo-hero">
+        <span class="badge">
+          <span class="badge-dot"></span>
+          <span data-i18n="demoBadge">Aula de videos • Tutoriales paso a paso</span>
+        </span>
+
+        <h1 class="demo-title">
+          <span data-i18n="demoTitle1">Demo</span>
+          <span class="gradient-text" data-i18n="demoTitle2">Video Tutorials</span>
+        </h1>
+
+        <p class="demo-subtitle" data-i18n="demoSubtitle">
+          Mirá tutoriales cortos y prácticos para aprender a usar RugbyBoard Pro.
+          Buscá por tema (crear jugada, animaciones, exportar) y reproducí en pantalla completa.
+        </p>
+      </header>
+
+      <!-- Controls -->
+      <section class="controls" aria-label="Video controls">
+        <div class="search-wrap">
+          <i class="fas fa-magnifying-glass"></i>
+          <input id="searchInput" class="search-input" type="text" placeholder="Buscar tutorial (ej: animación, exportar, lineout)..." />
+        </div>
+
+        <select id="categorySelect" class="select" aria-label="Filtrar por categoría">
+          <option value="all" data-i18n="catAll">Todas las categorías</option>
+          <option value="basics" data-i18n="catBasics">Básicos</option>
+          <option value="plays" data-i18n="catPlays">Jugadas</option>
+          <option value="animations" data-i18n="catAnimations">Animaciones</option>
+          <option value="export" data-i18n="catExport">Exportar & Compartir</option>
+        </select>
+      </section>
+
+      <!-- Videos grid -->
+      <section class="video-shell" id="videoGrid" aria-label="Video tutorials">
+
+        <!-- Card 1 -->
+        <article class="card" data-category="basics" data-title="Primeros pasos - interfaz y herramientas">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillBasics">Básicos</span>
+            <span class="duration">02:12</span>
+            <video muted playsinline preload="metadata" src="basicos.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v1Title">Primeros pasos</div>
+            <div class="card-text" data-i18n="v1Text">Conocé la interfaz, herramientas principales y cómo empezar en 2 minutos.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagBasics">Básicos</span></span>
+              <button class="watch-btn" data-video="basicos.mp4" data-title-i18n="v1Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 2 -->
+        <article class="card" data-category="plays" data-title="Crear una jugada - formación y flechas">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillPlays">Jugadas</span>
+            <span class="duration">03:05</span>
+            <video muted playsinline preload="metadata" src="play.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v2Title">Crear una jugada</div>
+            <div class="card-text" data-i18n="v2Text">Armá una jugada desde cero: formación, líneas de carrera y opciones.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagPlays">Jugadas</span></span>
+              <button class="watch-btn" data-video="play.mp4" data-title-i18n="v2Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 3 -->
+        <article class="card" data-category="animations" data-title="Animaciones - fases y timing">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillAnimations">Animaciones</span>
+            <span class="duration">04:20</span>
+            <video muted playsinline preload="metadata" src="play.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v3Title">Animaciones</div>
+            <div class="card-text" data-i18n="v3Text">Aprendé a animar por fases, ajustar timing y mejorar claridad.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagAnimations">Animaciones</span></span>
+              <button class="watch-btn" data-video="play.mp4" data-title-i18n="v3Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 4 -->
+        <article class="card" data-category="export" data-title="Exportar - imagen y compartir con el staff">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillExport">Exportar</span>
+            <span class="duration">02:40</span>
+            <video muted playsinline preload="metadata" src="sharewsp.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v4Title">Exportar y compartir</div>
+            <div class="card-text" data-i18n="v4Text">Exportá como imagen y compartí la jugada con tu staff y jugadores.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagExport">Exportar</span></span>
+              <button class="watch-btn" data-video="sharewsp.mp4" data-title-i18n="v4Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 5 -->
+        <article class="card" data-category="plays" data-title="Lineout - ejemplos de maul y salida">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillPlays">Jugadas</span>
+            <span class="duration">05:10</span>
+            <video muted playsinline preload="metadata" src="autorec.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v5Title">Lineout: ejemplos</div>
+            <div class="card-text" data-i18n="v5Text">Ejemplos prácticos: maul, salida y opción secundaria.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagPlays">Jugadas</span></span>
+              <button class="watch-btn" data-video="autorec.mp4" data-title-i18n="v5Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card 6 -->
+        <article class="card" data-category="basics" data-title="Atajos y buenas prácticas - organización">
+          <div class="thumb">
+            <span class="pill" data-i18n="pillBasics">Básicos</span>
+            <span class="duration">03:33</span>
+            <video muted playsinline preload="metadata" src="basicos.mp4"></video>
+          </div>
+          <div class="card-body">
+            <div class="card-title" data-i18n="v6Title">Atajos y tips pro</div>
+            <div class="card-text" data-i18n="v6Text">Organizá tu biblioteca, etiquetas y versiones para escalar el sistema.</div>
+            <div class="meta">
+              <span class="chip"><i class="fas fa-tag"></i> <span data-i18n="tagBasics">Básicos</span></span>
+              <button class="watch-btn" data-video="basicos.mp4" data-title-i18n="v6Title">
+                <i class="fas fa-play"></i> <span data-i18n="watch">Ver</span>
+              </button>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- Modal -->
+      <div class="modal-overlay" id="videoModal" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Video player">
+          <div class="modal-head">
+            <div class="modal-title"><i class="fas fa-play-circle"></i> <span id="modalTitle">Tutorial</span></div>
+            <button class="close-btn" id="closeModal" aria-label="Close">
+              <i class="fas fa-xmark"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <video id="modalVideo" controls playsinline></video>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <footer>
+        <div class="footer-content">
+          <div class="footer-top">
+            <div class="footer-brand">
+              <div class="footer-logo">
+                <div class="logo-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+                <span>RugbyBoard Pro</span>
+              </div>
+              <p class="footer-description" data-i18n="footerDesc">
+                La plataforma líder para diseño de estrategias y tácticas de rugby. Potencia tu entrenamiento con herramientas profesionales.
+              </p>
+            </div>
+
+            <div class="footer-column">
+              <h4 data-i18n="footerProduct">Producto</h4>
+              <div class="footer-links">
+                <a href="index.html#features" data-i18n="navFeatures">Características</a>
+                <a href="index.html#pricing" data-i18n="navPricing">Precios</a>
+                <a href="document.html" data-i18n="navDocs">Documentación</a>
+                <a href="demo.html" data-i18n="navDemo">Demo</a>
+                <a href="contacto.html" data-i18n="navContact">Contacto</a>
+              </div>
+            </div>
+
+            <div class="footer-column">
+              <h4 data-i18n="footerResources">Recursos</h4>
+              <div class="footer-links">
+                <a href="document.html" data-i18n="footerDocs">Guía</a>
+                <a href="demo.html" data-i18n="footerTutorials">Video tutoriales</a>
+                <a href="contacto.html" data-i18n="footerSupport">Soporte</a>
+              </div>
+            </div>
+
+            <div class="footer-column">
+              <h4 data-i18n="footerCompany">Compañía</h4>
+              <div class="footer-links">
+                <a href="acercade.html" data-i18n="footerAbout">Acerca de</a>
+                <a href="contacto.html" data-i18n="footerContact">Contacto</a>
+                <a href="#" data-i18n="footerLegal">Legal</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-bottom">
+            <div class="copyright" data-i18n="footerText">
+              © 2024 RugbyBoard Pro by JJwebs Academy. Todos los derechos reservados.
+            </div>
+
+            <div class="social-links">
+              <a href="#" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-twitter"></i></a>
+              <a href="#" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-facebook"></i></a>
+              <a href="#" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-instagram"></i></a>
+              <a href="#" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-linkedin"></i></a>
+              <a href="#" class="social-icon" target="_blank" rel="noopener noreferrer"><i class="fab fa-youtube"></i></a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <script>
+    // =========================
+    // i18n (nav + demo + footer)
+    // =========================
+    const translations = {
+      es: {
+        navFeatures: "Características",
+        navPricing: "Precios",
+        navAbout: "Acerca de",
+        navSupport: "Soporte",
+        navDocs: "Documentación",
+        navDemo: "Demo",
+        navContact: "Contacto",
+        navCta: "Comenzar Gratis",
+        navLangLabel: "Language",
+
+        demoBadge: "Aula de videos • Tutoriales paso a paso",
+        demoTitle1: "Demo",
+        demoTitle2: "Video Tutorials",
+        demoSubtitle: "Mirá tutoriales cortos y prácticos para aprender a usar RugbyBoard Pro. Buscá por tema (crear jugada, animaciones, exportar) y reproducí en pantalla completa.",
+
+        catAll: "Todas las categorías",
+        catBasics: "Básicos",
+        catPlays: "Jugadas",
+        catAnimations: "Animaciones",
+        catExport: "Exportar & Compartir",
+
+        pillBasics: "Básicos",
+        pillPlays: "Jugadas",
+        pillAnimations: "Animaciones",
+        pillExport: "Exportar",
+
+        v1Title: "Primeros pasos",
+        v1Text: "Conocé la interfaz, herramientas principales y cómo empezar en 2 minutos.",
+        v2Title: "Crear una jugada",
+        v2Text: "Armá una jugada desde cero: formación, líneas de carrera y opciones.",
+        v3Title: "Animaciones",
+        v3Text: "Aprendé a animar por fases, ajustar timing y mejorar claridad.",
+        v4Title: "Exportar y compartir",
+        v4Text: "Exportá como imagen y compartí la jugada con tu staff y jugadores.",
+        v5Title: "Lineout: ejemplos",
+        v5Text: "Ejemplos prácticos: maul, salida y opción secundaria.",
+        v6Title: "Atajos y tips pro",
+        v6Text: "Organizá tu biblioteca, etiquetas y versiones para escalar el sistema.",
+
+        tagBasics: "Básicos",
+        tagPlays: "Jugadas",
+        tagAnimations: "Animaciones",
+        tagExport: "Exportar",
+        watch: "Ver",
+
+        footerDesc: "La plataforma líder para diseño de estrategias y tácticas de rugby. Potencia tu entrenamiento con herramientas profesionales.",
+        footerProduct: "Producto",
+        footerResources: "Recursos",
+        footerCompany: "Compañía",
+        footerDocs: "Guía",
+        footerTutorials: "Video tutoriales",
+        footerSupport: "Soporte",
+        footerAbout: "Acerca de",
+        footerContact: "Contacto",
+        footerLegal: "Legal",
+        footerText: "© 2024 RugbyBoard Pro by JJwebs Academy. Todos los derechos reservados."
+      },
+
+      en: {
+        navFeatures: "Features",
+        navPricing: "Pricing",
+        navAbout: "About",
+        navSupport: "Support",
+        navDocs: "Docs",
+        navDemo: "Demo",
+        navContact: "Contact",
+        navCta: "Start Free",
+        navLangLabel: "Language",
+
+        demoBadge: "Video classroom • Step-by-step tutorials",
+        demoTitle1: "Demo",
+        demoTitle2: "Video Tutorials",
+        demoSubtitle: "Watch short and practical tutorials to learn RugbyBoard Pro. Search by topic (plays, animations, export) and watch fullscreen.",
+
+        catAll: "All categories",
+        catBasics: "Basics",
+        catPlays: "Plays",
+        catAnimations: "Animations",
+        catExport: "Export & Share",
+
+        pillBasics: "Basics",
+        pillPlays: "Plays",
+        pillAnimations: "Animations",
+        pillExport: "Export",
+
+        v1Title: "Getting started",
+        v1Text: "Learn the interface, key tools and how to begin in 2 minutes.",
+        v2Title: "Create a play",
+        v2Text: "Build a play from scratch: formation, running lines and options.",
+        v3Title: "Animations",
+        v3Text: "Animate by phases, adjust timing and improve clarity.",
+        v4Title: "Export & share",
+        v4Text: "Export as an image and share the play with staff and players.",
+        v5Title: "Lineout examples",
+        v5Text: "Practical examples: maul, exit and secondary option.",
+        v6Title: "Shortcuts & pro tips",
+        v6Text: "Organize your library, tags and versions to scale your system.",
+
+        tagBasics: "Basics",
+        tagPlays: "Plays",
+        tagAnimations: "Animations",
+        tagExport: "Export",
+        watch: "Watch",
+
+        footerDesc: "The leading platform for rugby tactics and strategy design. Boost your training with professional tools.",
+        footerProduct: "Product",
+        footerResources: "Resources",
+        footerCompany: "Company",
+        footerDocs: "Guide",
+        footerTutorials: "Video tutorials",
+        footerSupport: "Support",
+        footerAbout: "About",
+        footerContact: "Contact",
+        footerLegal: "Legal",
+        footerText: "© 2024 RugbyBoard Pro by JJwebs Academy. All rights reserved."
+      },
+
+      it: {
+        navFeatures: "Funzionalità",
+        navPricing: "Prezzi",
+        navAbout: "Chi siamo",
+        navSupport: "Supporto",
+        navDocs: "Documentazione",
+        navDemo: "Demo",
+        navContact: "Contatto",
+        navCta: "Inizia Gratis",
+        navLangLabel: "Language",
+
+        demoBadge: "Aula video • Tutorial passo passo",
+        demoTitle1: "Demo",
+        demoTitle2: "Video Tutorial",
+        demoSubtitle: "Guarda tutorial brevi e pratici per imparare RugbyBoard Pro. Cerca per tema (schemi, animazioni, export) e guarda a schermo intero.",
+
+        catAll: "Tutte le categorie",
+        catBasics: "Base",
+        catPlays: "Schemi",
+        catAnimations: "Animazioni",
+        catExport: "Esporta & Condividi",
+
+        pillBasics: "Base",
+        pillPlays: "Schemi",
+        pillAnimations: "Animazioni",
+        pillExport: "Export",
+
+        v1Title: "Prime mosse",
+        v1Text: "Scopri l’interfaccia, gli strumenti principali e come iniziare in 2 minuti.",
+        v2Title: "Crea uno schema",
+        v2Text: "Crea uno schema da zero: formazione, linee di corsa e opzioni.",
+        v3Title: "Animazioni",
+        v3Text: "Anima per fasi, regola il timing e migliora la chiarezza.",
+        v4Title: "Esporta e condividi",
+        v4Text: "Esporta come immagine e condividi lo schema con staff e giocatori.",
+        v5Title: "Esempi Lineout",
+        v5Text: "Esempi pratici: maul, uscita e opzione secondaria.",
+        v6Title: "Scorciatoie & tips pro",
+        v6Text: "Organizza libreria, tag e versioni per scalare il sistema.",
+
+        tagBasics: "Base",
+        tagPlays: "Schemi",
+        tagAnimations: "Animazioni",
+        tagExport: "Export",
+        watch: "Guarda",
+
+        footerDesc: "La piattaforma leader per progettare tattiche e strategie di rugby. Potenzia gli allenamenti con strumenti professionali.",
+        footerProduct: "Prodotto",
+        footerResources: "Risorse",
+        footerCompany: "Azienda",
+        footerDocs: "Guida",
+        footerTutorials: "Video tutorial",
+        footerSupport: "Supporto",
+        footerAbout: "Chi siamo",
+        footerContact: "Contatto",
+        footerLegal: "Legale",
+        footerText: "© 2024 RugbyBoard Pro by JJwebs Academy. Tutti i diritti riservati."
+      }
+    };
+
+    function setLanguage(lang) {
+      const t = translations[lang] || translations.es;
+
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (t[key]) el.textContent = t[key];
+      });
+
+      document.querySelectorAll(".lang-btn").forEach(btn => {
+        btn.classList.toggle("is-active", btn.dataset.lang === lang);
+      });
+
+      document.documentElement.lang = lang;
+      localStorage.setItem("lang", lang);
+    }
+
+    const savedLang = localStorage.getItem("lang") || "es";
+    setLanguage(savedLang);
+
+    document.querySelectorAll(".lang-btn").forEach(btn => {
+      btn.addEventListener("click", () => setLanguage(btn.dataset.lang));
+    });
+
+    // =========================
+    // Mobile menu logic (home)
+    // =========================
+    const burgerBtn = document.getElementById("burgerBtn");
+    const overlay = document.getElementById("menuOverlay");
+    const drawer = document.getElementById("mobileDrawer");
+    const nav = document.getElementById("mainNav");
+
+    function setDrawerTop() {
+      const navRect = nav.getBoundingClientRect();
+      const top = Math.max(64, Math.round(navRect.height + 10));
+      drawer.style.top = top + "px";
+    }
+
+    function openMenu() {
+      setDrawerTop();
+      burgerBtn.classList.add("is-open");
+      overlay.classList.add("is-open");
+      drawer.classList.add("is-open");
+
+      burgerBtn.setAttribute("aria-expanded", "true");
+      overlay.setAttribute("aria-hidden", "false");
+      drawer.setAttribute("aria-hidden", "false");
+
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeMenu() {
+      burgerBtn.classList.remove("is-open");
+      overlay.classList.remove("is-open");
+      drawer.classList.remove("is-open");
+
+      burgerBtn.setAttribute("aria-expanded", "false");
+      overlay.setAttribute("aria-hidden", "true");
+      drawer.setAttribute("aria-hidden", "true");
+
+      document.body.style.overflow = "";
+    }
+
+    burgerBtn?.addEventListener("click", () => {
+      const isOpen = drawer.classList.contains("is-open");
+      isOpen ? closeMenu() : openMenu();
+    });
+
+    overlay?.addEventListener("click", closeMenu);
+
+    drawer?.addEventListener("click", (e) => {
+      const t = e.target;
+      if (t && (t.matches("a") || t.closest("a"))) closeMenu();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && drawer.classList.contains("is-open")) closeMenu();
+    });
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 768) closeMenu();
+      if (drawer.classList.contains("is-open")) setDrawerTop();
+    });
+
+    window.addEventListener("scroll", () => {
+      if (drawer.classList.contains("is-open")) setDrawerTop();
+    }, { passive: true });
+
+    // =========================
+    // Video hover preview (mute)
+    // =========================
+    document.querySelectorAll(".thumb video").forEach(v => {
+      v.addEventListener("mouseenter", () => {
+        try { v.currentTime = 0; v.play(); } catch (e) {}
+      });
+      v.addEventListener("mouseleave", () => {
+        try { v.pause(); v.currentTime = 0; } catch (e) {}
+      });
+      // Mobile: no hover -> keep paused
+    });
+
+    // =========================
+    // Modal video player
+    // =========================
+    const modal = document.getElementById("videoModal");
+    const modalVideo = document.getElementById("modalVideo");
+    const modalTitle = document.getElementById("modalTitle");
+    const closeModalBtn = document.getElementById("closeModal");
+
+    function openVideo(src, titleText) {
+      modal.classList.add("is-open");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+
+      modalTitle.textContent = titleText || "Tutorial";
+      modalVideo.src = src;
+      modalVideo.currentTime = 0;
+      modalVideo.play().catch(() => {});
+    }
+
+    function closeVideo() {
+      modal.classList.remove("is-open");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+
+      modalVideo.pause();
+      modalVideo.removeAttribute("src");
+      modalVideo.load();
+    }
+
+    closeModalBtn.addEventListener("click", closeVideo);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeVideo(); });
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape" && modal.classList.contains("is-open")) closeVideo(); });
+
+    document.querySelectorAll(".watch-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const src = btn.getAttribute("data-video");
+        const key = btn.getAttribute("data-title-i18n");
+        const lang = localStorage.getItem("lang") || "es";
+        const titleText = (translations[lang] && translations[lang][key]) ? translations[lang][key] : (btn.textContent || "Tutorial");
+        openVideo(src, titleText);
+      });
+    });
+
+    // =========================
+    // Filter: search + category
+    // =========================
+    const searchInput = document.getElementById("searchInput");
+    const categorySelect = document.getElementById("categorySelect");
+    const cards = Array.from(document.querySelectorAll("#videoGrid .card"));
+
+    function applyFilters() {
+      const q = (searchInput.value || "").trim().toLowerCase();
+      const cat = categorySelect.value;
+
+      cards.forEach(card => {
+        const title = (card.getAttribute("data-title") || "").toLowerCase();
+        const category = card.getAttribute("data-category") || "all";
+
+        const matchesText = !q || title.includes(q);
+        const matchesCat = (cat === "all") || (cat === category);
+
+        card.style.display = (matchesText && matchesCat) ? "" : "none";
+      });
+    }
+
+    searchInput.addEventListener("input", applyFilters);
+    categorySelect.addEventListener("change", applyFilters);
+    applyFilters();
+  </script>
+</body>
+
+</html>
+
+
